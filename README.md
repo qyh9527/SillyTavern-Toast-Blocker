@@ -2,17 +2,18 @@
 
 一个同时兼容原生 SillyTavern 与 TauriTavern 的 TypeScript 纯前端扩展。它既能分别屏蔽全局 `toastr` 产生的 Success、Info、Warning 与 Error，也能把未屏蔽的通知交给轻量重绘器。
 
-## 安装（置顶）
+## 安装
 
-> ### 🔵 [点击打开安装地址](https://github.com/qyh9527/SillyTavern-Toast-Blocker)
-
-在 SillyTavern 或 TauriTavern 的“扩展 → 安装扩展”中粘贴下面的地址：
-
-```text
-https://github.com/qyh9527/SillyTavern-Toast-Blocker
-```
-
-安装后重启一次酒馆。首次安装当页会立即处理后续 Toast；重启后，前置规则才能覆盖扩展脚本加载前出现的启动通知。
+> [!IMPORTANT]
+> **安装方式**
+>
+> 在 SillyTavern 或 TauriTavern 的“扩展 → 安装扩展”中粘贴：
+>
+> ```text
+> https://github.com/qyh9527/SillyTavern-Toast-Blocker
+> ```
+>
+> 安装后重启一次酒馆。首次安装当页会立即处理后续 Toast；重启后，前置规则才能覆盖扩展脚本加载前出现的启动通知。
 
 ## 为什么不是简单覆盖 `toastr`
 

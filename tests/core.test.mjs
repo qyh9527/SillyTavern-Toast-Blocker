@@ -18,22 +18,39 @@ test('settings default to enabled and normalize malformed values', () => {
     blockedLevels: allBlocked,
     redrawEnabled: false,
     redrawMaxVisible: 6,
+    redrawAggregateDuplicates: true,
+    diagnosticsEnabled: false,
     logSuppressed: false,
-    schemaVersion: 3,
+    schemaVersion: 4,
   });
   assert.deepEqual(normalizeSettings({ enabled: 0, logSuppressed: 1 }), {
     enabled: false,
     blockedLevels: allBlocked,
     redrawEnabled: false,
     redrawMaxVisible: 6,
+    redrawAggregateDuplicates: true,
+    diagnosticsEnabled: false,
     logSuppressed: true,
-    schemaVersion: 3,
+    schemaVersion: 4,
   });
   assert.deepEqual(normalizeSettings({ blockedLevels: { success: false, error: 0 } }).blockedLevels, {
     success: false,
     info: true,
     warning: true,
     error: false,
+  });
+  assert.deepEqual(normalizeSettings({
+    redrawAggregateDuplicates: false,
+    diagnosticsEnabled: true,
+  }), {
+    enabled: true,
+    blockedLevels: allBlocked,
+    redrawEnabled: false,
+    redrawMaxVisible: 6,
+    redrawAggregateDuplicates: false,
+    diagnosticsEnabled: true,
+    logSuppressed: false,
+    schemaVersion: 4,
   });
 });
 

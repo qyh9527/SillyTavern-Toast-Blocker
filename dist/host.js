@@ -63,6 +63,8 @@ class ToastBlockerHost {
             blockedLevels: this.settings.blockedLevels,
             redrawEnabled: false,
             redrawMaxVisible: this.settings.redrawMaxVisible,
+            redrawAggregateDuplicates: this.settings.redrawAggregateDuplicates,
+            diagnosticsEnabled: this.settings.diagnosticsEnabled,
         });
         await this.persistPreloadCss(false, this.settings.blockedLevels, false, true);
     }
@@ -73,6 +75,8 @@ class ToastBlockerHost {
             blockedLevels: this.settings.blockedLevels,
             redrawEnabled: false,
             redrawMaxVisible: this.settings.redrawMaxVisible,
+            redrawAggregateDuplicates: this.settings.redrawAggregateDuplicates,
+            diagnosticsEnabled: this.settings.diagnosticsEnabled,
         });
         await this.persistPreloadCss(false, this.settings.blockedLevels, false, false);
         delete extension_settings[SETTINGS_KEY];
@@ -146,6 +150,31 @@ class ToastBlockerHost {
         await this.forceSave();
         this.renderStatus();
     }
+    async setAggregateDuplicates(enabled) {
+        this.settings.redrawAggregateDuplicates = Boolean(enabled);
+        extension_settings[SETTINGS_KEY] = this.settings;
+        this.applyRuntimeSettings();
+        await this.forceSave();
+        this.statusText = this.settings.redrawAggregateDuplicates
+            ? '重复通知聚合已启用：1 秒内相同内容合并计数'
+            : '重复通知聚合已关闭';
+        this.renderStatus();
+    }
+    async setDiagnosticsEnabled(enabled) {
+        this.settings.diagnosticsEnabled = Boolean(enabled);
+        extension_settings[SETTINGS_KEY] = this.settings;
+        this.applyRuntimeSettings();
+        await this.forceSave();
+        this.statusText = this.settings.diagnosticsEnabled
+            ? '本地性能诊断已启用；不会上传或记录 Toast 正文'
+            : '本地性能诊断已关闭';
+        this.renderStatus();
+    }
+    resetDiagnostics() {
+        this.runtime.resetDiagnostics();
+        this.statusText = '本地诊断统计已清零';
+        this.renderStatus();
+    }
     async shutdown() {
         this.settings.enabled = false;
         this.settings.redrawEnabled = false;
@@ -193,6 +222,8 @@ class ToastBlockerHost {
             blockedLevels: this.settings.blockedLevels,
             redrawEnabled: this.settings.redrawEnabled,
             redrawMaxVisible: this.settings.redrawMaxVisible,
+            redrawAggregateDuplicates: this.settings.redrawAggregateDuplicates,
+            diagnosticsEnabled: this.settings.diagnosticsEnabled,
         });
     }
     async persistPreloadCss(enabled, levels, hideNativeUntilRedrawReady, forceSave) {
@@ -314,6 +345,44 @@ class ToastBlockerHost {
           </div>
           <input id="${APP_ID}-redraw-limit" class="text_pole" type="number" min="1" max="20" step="1" inputmode="numeric" aria-label="重绘 Toast 最大同时显示数量">
         </div>
+        <div class="qyh-toast-blocker-feature-note">
+          <strong>后台计时保护已内置</strong>
+          <span>切到后台或锁屏时冻结剩余显示时间，回到前台后继续。</span>
+        </div>
+        <div class="qyh-toast-blocker-row">
+          <div>
+            <strong>重复通知聚合</strong>
+            <div class="qyh-toast-blocker-help">1 秒内同类型、同标题和正文合并为一张卡片，并显示累计次数。</div>
+          </div>
+          <label class="checkbox_label" title="聚合短时间内的重复 Toast">
+            <input id="${APP_ID}-aggregate" type="checkbox">
+            <span>启用</span>
+          </label>
+        </div>
+        <div class="qyh-toast-blocker-row">
+          <div>
+            <strong>本地性能诊断</strong>
+            <div class="qyh-toast-blocker-help">只统计数量和耗时，不保存、不上传，也不读取 Toast 正文。</div>
+          </div>
+          <label class="checkbox_label" title="启用仅保存在内存中的性能诊断">
+            <input id="${APP_ID}-diagnostics" type="checkbox">
+            <span>启用</span>
+          </label>
+        </div>
+        <section class="qyh-toast-blocker-diagnostics" id="${APP_ID}-diagnostics-panel" aria-label="本地性能诊断结果" hidden>
+          <div class="qyh-toast-blocker-diagnostics-grid">
+            <div><small>已重绘</small><strong data-diagnostic="rendered">0</strong></div>
+            <div><small>已聚合</small><strong data-diagnostic="aggregated">0</strong></div>
+            <div><small>队列峰值</small><strong data-diagnostic="pendingPeak">0</strong></div>
+            <div><small>后台暂停</small><strong data-diagnostic="visibilityPauses">0</strong></div>
+            <div><small>平均批次</small><strong data-diagnostic="averageBatchMs">0 ms</strong></div>
+            <div><small>最慢批次</small><strong data-diagnostic="maxBatchMs">0 ms</strong></div>
+            <div><small>超帧预算</small><strong data-diagnostic="overBudgetBatches">0</strong></div>
+            <div><small>页面长帧</small><strong data-diagnostic="observedLongFrames">—</strong></div>
+          </div>
+          <div class="qyh-toast-blocker-help" data-diagnostic="observerSupport"></div>
+          <button id="${APP_ID}-diagnostics-reset" class="menu_button" type="button">清空诊断统计</button>
+        </section>
         <div class="qyh-toast-blocker-row">
           <div>
             <strong>控制台记录</strong>
@@ -348,6 +417,15 @@ class ToastBlockerHost {
         });
         wrapper.querySelector(`#${APP_ID}-redraw-limit`)?.addEventListener('change', event => {
             void this.setRedrawMaxVisible(event.currentTarget.value).catch(() => { });
+        });
+        wrapper.querySelector(`#${APP_ID}-aggregate`)?.addEventListener('change', event => {
+            void this.setAggregateDuplicates(event.currentTarget.checked).catch(() => { });
+        });
+        wrapper.querySelector(`#${APP_ID}-diagnostics`)?.addEventListener('change', event => {
+            void this.setDiagnosticsEnabled(event.currentTarget.checked).catch(() => { });
+        });
+        wrapper.querySelector(`#${APP_ID}-diagnostics-reset`)?.addEventListener('click', () => {
+            this.resetDiagnostics();
         });
         wrapper.querySelectorAll('[data-toast-level]').forEach(input => {
             input.addEventListener('change', event => {
@@ -385,12 +463,18 @@ class ToastBlockerHost {
         const logging = this.panel.querySelector(`#${APP_ID}-logging`);
         const redraw = this.panel.querySelector(`#${APP_ID}-redraw`);
         const redrawLimit = this.panel.querySelector(`#${APP_ID}-redraw-limit`);
+        const aggregate = this.panel.querySelector(`#${APP_ID}-aggregate`);
+        const diagnostics = this.panel.querySelector(`#${APP_ID}-diagnostics`);
         if (enabled)
             enabled.checked = this.settings.enabled;
         if (logging)
             logging.checked = this.settings.logSuppressed;
         if (redraw)
             redraw.checked = this.settings.redrawEnabled;
+        if (aggregate)
+            aggregate.checked = this.settings.redrawAggregateDuplicates;
+        if (diagnostics)
+            diagnostics.checked = this.settings.diagnosticsEnabled;
         if (redrawLimit) {
             redrawLimit.value = String(this.settings.redrawMaxVisible);
             redrawLimit.disabled = !this.settings.redrawEnabled;
@@ -400,6 +484,34 @@ class ToastBlockerHost {
             input.checked = this.settings.blockedLevels[level];
         });
         const runtime = this.runtime.getStatus();
+        const diagnosticPanel = this.panel.querySelector(`#${APP_ID}-diagnostics-panel`);
+        if (diagnosticPanel)
+            diagnosticPanel.hidden = !this.settings.diagnosticsEnabled;
+        const diagnosticValues = {
+            rendered: String(runtime.redraw.rendered),
+            aggregated: String(runtime.redraw.aggregated),
+            pendingPeak: String(runtime.redraw.pendingPeak),
+            visibilityPauses: String(runtime.redraw.visibilityPauses),
+            averageBatchMs: `${runtime.redraw.averageBatchMs.toFixed(2)} ms`,
+            maxBatchMs: `${runtime.redraw.maxBatchMs.toFixed(2)} ms`,
+            overBudgetBatches: String(runtime.redraw.overBudgetBatches),
+            observedLongFrames: runtime.redraw.observerType === null
+                ? '—'
+                : String(runtime.redraw.observedLongFrames),
+        };
+        for (const [key, value] of Object.entries(diagnosticValues)) {
+            const target = this.panel.querySelector(`[data-diagnostic="${key}"]`);
+            if (target)
+                target.textContent = value;
+        }
+        const observerSupport = this.panel.querySelector('[data-diagnostic="observerSupport"]');
+        if (observerSupport) {
+            observerSupport.textContent = runtime.redraw.observerType === 'long-animation-frame'
+                ? `页面长帧增强：Long Animation Frame · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms`
+                : runtime.redraw.observerType === 'longtask'
+                    ? `页面长帧回退：Long Task · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms`
+                    : '当前 WebView 不提供页面长帧条目；批次耗时诊断仍正常工作。';
+        }
         const earlyRule = hasManagedCss(power_user.custom_css);
         const status = this.panel.querySelector(`#${APP_ID}-status`);
         if (!status)
@@ -416,7 +528,7 @@ class ToastBlockerHost {
             ? `屏蔽 ${effectiveBlocked.join(' / ')}`
             : '屏蔽器关闭';
         const redrawState = this.settings.redrawEnabled
-            ? `重绘器运行中 ${runtime.redraw.active}/${runtime.redraw.maxVisible} · 累计 ${runtime.redraw.rendered}`
+            ? `重绘器运行中 ${runtime.redraw.active}/${runtime.redraw.maxVisible} · 重绘 ${runtime.redraw.rendered} · 聚合 ${runtime.redraw.aggregated}`
             : '重绘器关闭';
         status.textContent = `状态：${blockerState} · ${redrawState} · 本次拦截 ${this.suppressedCount}${restart}`;
     }
@@ -440,6 +552,9 @@ export function installToastBlockerHost() {
         disable: () => host.setEnabled(false),
         repair: () => host.applyPreference({ forceSave: true }),
         redraw: (enabled) => host.setRedrawEnabled(enabled),
+        aggregate: (enabled) => host.setAggregateDuplicates(enabled),
+        diagnostics: (enabled) => host.setDiagnosticsEnabled(enabled),
+        resetDiagnostics: () => host.resetDiagnostics(),
         shutdown: () => host.shutdown(),
         setLevel: (level, blocked) => host.setLevel(level, blocked),
         status: () => host.getPublicStatus(),

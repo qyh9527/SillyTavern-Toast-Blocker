@@ -8,6 +8,8 @@ export class ToastRuntimeBlocker {
     onStateChanged;
     redrawEnabled = false;
     redrawMaxVisible = 6;
+    redrawAggregateDuplicates = true;
+    diagnosticsEnabled = false;
     guard = null;
     auxiliaryGuard = null;
     guardedTarget = null;
@@ -34,6 +36,8 @@ export class ToastRuntimeBlocker {
             blockedLevels: this.blockedLevels,
             redrawEnabled: this.redrawEnabled,
             redrawMaxVisible: this.redrawMaxVisible,
+            redrawAggregateDuplicates: this.redrawAggregateDuplicates,
+            diagnosticsEnabled: this.diagnosticsEnabled,
         });
     }
     setBlockedLevels(levels) {
@@ -42,9 +46,11 @@ export class ToastRuntimeBlocker {
             blockedLevels: levels,
             redrawEnabled: this.redrawEnabled,
             redrawMaxVisible: this.redrawMaxVisible,
+            redrawAggregateDuplicates: this.redrawAggregateDuplicates,
+            diagnosticsEnabled: this.diagnosticsEnabled,
         });
     }
-    configure({ blockerEnabled, blockedLevels, redrawEnabled, redrawMaxVisible }) {
+    configure({ blockerEnabled, blockedLevels, redrawEnabled, redrawMaxVisible, redrawAggregateDuplicates, diagnosticsEnabled, }) {
         this.stopWatchdog();
         this.stopObserver();
         this.restoreGuard();
@@ -53,7 +59,12 @@ export class ToastRuntimeBlocker {
         this.blockedLevels = { ...blockedLevels };
         this.redrawEnabled = Boolean(redrawEnabled);
         this.redrawMaxVisible = redrawMaxVisible;
-        this.renderer.configure(this.redrawEnabled, this.redrawMaxVisible);
+        this.redrawAggregateDuplicates = Boolean(redrawAggregateDuplicates);
+        this.diagnosticsEnabled = Boolean(diagnosticsEnabled);
+        this.renderer.configure(this.redrawEnabled, this.redrawMaxVisible, {
+            aggregateDuplicates: this.redrawAggregateDuplicates,
+            diagnosticsEnabled: this.diagnosticsEnabled,
+        });
         if (this.isBlockerEffective()) {
             this.ensureRuntimeStyle();
             this.startObserver();
@@ -163,6 +174,9 @@ export class ToastRuntimeBlocker {
         if (this.watchdog)
             clearInterval(this.watchdog);
         this.watchdog = null;
+    }
+    resetDiagnostics() {
+        this.renderer.resetDiagnostics();
     }
     getStatus() {
         return {

@@ -63,6 +63,8 @@ test('runtime blocker suppresses then restores toastr methods', () => {
       blockedLevels: { success: false, info: false, warning: false, error: true },
       redrawEnabled: false,
       redrawMaxVisible: 6,
+      redrawAggregateDuplicates: true,
+      diagnosticsEnabled: false,
     });
     assert.deepEqual(globalThis.toastr.error('hidden'), { length: 0 });
     assert.equal(globalThis.toastr.success('visible'), 'success:visible');
@@ -83,6 +85,18 @@ test('runtime blocker suppresses then restores toastr methods', () => {
         evicted: 0,
         fallbacks: 0,
         maxVisible: 6,
+        aggregated: 0,
+        pendingPeak: 0,
+        visibilityPauses: 0,
+        pausedForVisibility: 0,
+        diagnosticsEnabled: false,
+        frameSamples: 0,
+        averageBatchMs: 0,
+        maxBatchMs: 0,
+        overBudgetBatches: 0,
+        observedLongFrames: 0,
+        maxObservedLongFrameMs: 0,
+        observerType: null,
       },
     });
     assert.ok(queriedSelectors.includes('#toast-container > .toast-error'));
@@ -94,6 +108,8 @@ test('runtime blocker suppresses then restores toastr methods', () => {
       blockedLevels: { success: false, info: false, warning: false, error: true },
       redrawEnabled: true,
       redrawMaxVisible: 4,
+      redrawAggregateDuplicates: true,
+      diagnosticsEnabled: false,
     });
     assert.deepEqual(globalThis.toastr.error('blocked wins'), { length: 0 });
     assert.equal(globalThis.toastr.info('redrawn'), 'redraw:info:redrawn');
@@ -111,6 +127,8 @@ test('runtime blocker suppresses then restores toastr methods', () => {
       blockedLevels: { success: false, info: false, warning: false, error: false },
       redrawEnabled: false,
       redrawMaxVisible: 6,
+      redrawAggregateDuplicates: true,
+      diagnosticsEnabled: false,
     });
     assert.equal(globalThis.toastr.error('still visible'), 'error:still visible');
     assert.deepEqual(blocker.getStatus(), {
@@ -129,6 +147,18 @@ test('runtime blocker suppresses then restores toastr methods', () => {
         evicted: 0,
         fallbacks: 0,
         maxVisible: 6,
+        aggregated: 0,
+        pendingPeak: 0,
+        visibilityPauses: 0,
+        pausedForVisibility: 0,
+        diagnosticsEnabled: false,
+        frameSamples: 0,
+        averageBatchMs: 0,
+        maxBatchMs: 0,
+        overBudgetBatches: 0,
+        observedLongFrames: 0,
+        maxObservedLongFrameMs: 0,
+        observerType: null,
       },
     });
   } finally {

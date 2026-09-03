@@ -10,6 +10,8 @@ export interface RuntimeConfiguration {
     blockedLevels: BlockedToastLevels;
     redrawEnabled: boolean;
     redrawMaxVisible: number;
+    redrawAggregateDuplicates: boolean;
+    diagnosticsEnabled: boolean;
 }
 export interface RuntimeStatus {
     enabled: boolean;
@@ -28,6 +30,8 @@ export declare class ToastRuntimeBlocker {
     onStateChanged: () => void;
     redrawEnabled: boolean;
     redrawMaxVisible: number;
+    redrawAggregateDuplicates: boolean;
+    diagnosticsEnabled: boolean;
     guard: ToastrGuard | null;
     auxiliaryGuard: ToastrAuxiliaryGuard | null;
     guardedTarget: Record<string, unknown> | null;
@@ -37,7 +41,7 @@ export declare class ToastRuntimeBlocker {
     constructor({ onSuppressed, onRedrawn, onStateChanged }?: RuntimeCallbacks);
     setEnabled(enabled: boolean): void;
     setBlockedLevels(levels: BlockedToastLevels): void;
-    configure({ blockerEnabled, blockedLevels, redrawEnabled, redrawMaxVisible }: RuntimeConfiguration): void;
+    configure({ blockerEnabled, blockedLevels, redrawEnabled, redrawMaxVisible, redrawAggregateDuplicates, diagnosticsEnabled, }: RuntimeConfiguration): void;
     isEffective(): boolean;
     isBlockerEffective(): boolean;
     ensureRuntimeStyle(): void;
@@ -49,6 +53,7 @@ export declare class ToastRuntimeBlocker {
     stopObserver(): void;
     startWatchdog(): void;
     stopWatchdog(): void;
+    resetDiagnostics(): void;
     getStatus(): RuntimeStatus;
 }
 export {};

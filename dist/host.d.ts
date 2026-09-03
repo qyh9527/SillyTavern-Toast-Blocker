@@ -38,6 +38,9 @@ declare class ToastBlockerHost {
     setLogging(enabled: boolean): Promise<void>;
     setRedrawEnabled(enabled: boolean): Promise<void>;
     setRedrawMaxVisible(value: unknown): Promise<void>;
+    setAggregateDuplicates(enabled: boolean): Promise<void>;
+    setDiagnosticsEnabled(enabled: boolean): Promise<void>;
+    resetDiagnostics(): void;
     shutdown(): Promise<void>;
     requestFrontendRefresh(button: HTMLButtonElement): Promise<void>;
     resetRefreshButton(): void;

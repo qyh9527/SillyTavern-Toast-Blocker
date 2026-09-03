@@ -14,8 +14,10 @@ const DEFAULT_SETTINGS = Object.freeze({
     blockedLevels: DEFAULT_BLOCKED_LEVELS,
     redrawEnabled: false,
     redrawMaxVisible: 6,
+    redrawAggregateDuplicates: true,
+    diagnosticsEnabled: false,
     logSuppressed: false,
-    schemaVersion: 3,
+    schemaVersion: 4,
 });
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -38,6 +40,10 @@ export function normalizeSettings(value) {
         },
         redrawEnabled: Boolean(candidate.redrawEnabled),
         redrawMaxVisible: normalizeMaxVisible(candidate.redrawMaxVisible),
+        redrawAggregateDuplicates: candidate.redrawAggregateDuplicates === undefined
+            ? true
+            : Boolean(candidate.redrawAggregateDuplicates),
+        diagnosticsEnabled: Boolean(candidate.diagnosticsEnabled),
         logSuppressed: Boolean(candidate.logSuppressed),
         schemaVersion: DEFAULT_SETTINGS.schemaVersion,
     };

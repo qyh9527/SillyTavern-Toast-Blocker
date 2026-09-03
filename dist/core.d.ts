@@ -10,8 +10,10 @@ export interface ToastBlockerSettings {
     blockedLevels: BlockedToastLevels;
     redrawEnabled: boolean;
     redrawMaxVisible: number;
+    redrawAggregateDuplicates: boolean;
+    diagnosticsEnabled: boolean;
     logSuppressed: boolean;
-    schemaVersion: 3;
+    schemaVersion: 4;
 }
 export interface SuppressedToast {
     level: ToastLevel;

@@ -11,8 +11,10 @@ export interface ToastBlockerSettings {
   blockedLevels: BlockedToastLevels;
   redrawEnabled: boolean;
   redrawMaxVisible: number;
+  redrawAggregateDuplicates: boolean;
+  diagnosticsEnabled: boolean;
   logSuppressed: boolean;
-  schemaVersion: 3;
+  schemaVersion: 4;
 }
 
 export interface SuppressedToast {
@@ -32,8 +34,10 @@ const DEFAULT_SETTINGS: Readonly<ToastBlockerSettings> = Object.freeze({
   blockedLevels: DEFAULT_BLOCKED_LEVELS as BlockedToastLevels,
   redrawEnabled: false,
   redrawMaxVisible: 6,
+  redrawAggregateDuplicates: true,
+  diagnosticsEnabled: false,
   logSuppressed: false,
-  schemaVersion: 3,
+  schemaVersion: 4,
 });
 
 function escapeRegExp(value: string): string {
@@ -62,6 +66,10 @@ export function normalizeSettings(value: unknown): ToastBlockerSettings {
     },
     redrawEnabled: Boolean(candidate.redrawEnabled),
     redrawMaxVisible: normalizeMaxVisible(candidate.redrawMaxVisible),
+    redrawAggregateDuplicates: candidate.redrawAggregateDuplicates === undefined
+      ? true
+      : Boolean(candidate.redrawAggregateDuplicates),
+    diagnosticsEnabled: Boolean(candidate.diagnosticsEnabled),
     logSuppressed: Boolean(candidate.logSuppressed),
     schemaVersion: DEFAULT_SETTINGS.schemaVersion,
   };

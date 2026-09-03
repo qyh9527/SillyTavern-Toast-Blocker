@@ -139,28 +139,43 @@ class FakeElement {
   }
 
   animate() {
-    return { pause() {}, cancel() {} };
+    return { pause() {}, play() {}, cancel() {} };
   }
 }
 
-function installFakeBrowser() {
+function installFakeBrowser({ performanceObserver } = {}) {
   const originals = {
     cancelAnimationFrame: globalThis.cancelAnimationFrame,
     document: globalThis.document,
     jQuery: globalThis.jQuery,
+    PerformanceObserver: globalThis.PerformanceObserver,
     requestAnimationFrame: globalThis.requestAnimationFrame,
   };
   const body = new FakeElement('body');
   body.setConnected(true);
   const frames = [];
-  globalThis.document = {
+  const documentEvents = new Map();
+  const fakeDocument = {
     activeElement: null,
     body,
+    hidden: false,
+    visibilityState: 'visible',
+    addEventListener(name, listener) {
+      const listeners = documentEvents.get(name) ?? [];
+      listeners.push(listener);
+      documentEvents.set(name, listeners);
+    },
+    removeEventListener(name, listener) {
+      const listeners = documentEvents.get(name) ?? [];
+      documentEvents.set(name, listeners.filter(candidate => candidate !== listener));
+    },
     createDocumentFragment: () => new FakeFragment(),
     createElement: tag => new FakeElement(tag),
     querySelector: selector => selector === 'body' ? body : null,
   };
+  globalThis.document = fakeDocument;
   globalThis.jQuery = value => value === undefined ? { length: 0 } : { 0: value, length: 1 };
+  if (performanceObserver) globalThis.PerformanceObserver = performanceObserver;
   globalThis.requestAnimationFrame = callback => {
     frames.push(callback);
     return frames.length;
@@ -169,10 +184,16 @@ function installFakeBrowser() {
   return {
     body,
     frames,
+    setVisibility(state) {
+      fakeDocument.visibilityState = state;
+      fakeDocument.hidden = state === 'hidden';
+      for (const listener of documentEvents.get('visibilitychange') ?? []) listener();
+    },
     restore() {
       globalThis.cancelAnimationFrame = originals.cancelAnimationFrame;
       globalThis.document = originals.document;
       globalThis.jQuery = originals.jQuery;
+      globalThis.PerformanceObserver = originals.PerformanceObserver;
       globalThis.requestAnimationFrame = originals.requestAnimationFrame;
     },
   };
@@ -206,6 +227,136 @@ test('redraw renderer batches a burst into one frame and enforces its DOM ceilin
 
     assert.equal(renderer.clear(third, { force: true, immediate: true }), true);
     assert.equal(renderer.getStats().active, 1);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('redraw renderer aggregates identical notifications into one counted card', async () => {
+  const browser = installFakeBrowser();
+  try {
+    let shown = 0;
+    let hidden = 0;
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6, { aggregateDuplicates: true });
+    const options = {
+      timeOut: 0,
+      onShown: () => { shown += 1; },
+      onHidden: () => { hidden += 1; },
+    };
+    const first = renderer.show('info', ['same', 'title', options], () => undefined, {});
+    const second = renderer.show('info', ['same', 'title', options], () => undefined, {});
+
+    assert.equal(first[0], second[0]);
+    assert.equal(renderer.getStats().pending, 1);
+    assert.equal(renderer.getStats().aggregated, 1);
+    await Promise.resolve();
+    browser.frames.shift()(16);
+    assert.equal(renderer.getStats().active, 1);
+    assert.equal(first[0].querySelector('.qyh-toast-redraw-count').textContent, '×2');
+    assert.equal(shown, 2);
+
+    renderer.show('info', ['same', 'title', options], () => undefined, {});
+    assert.equal(renderer.getStats().aggregated, 2);
+    assert.equal(first[0].querySelector('.qyh-toast-redraw-count').textContent, '×3');
+    renderer.clear(first, { force: true, immediate: true });
+    assert.equal(hidden, 3);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('duplicate aggregation can be disabled without changing redraw behavior', async () => {
+  const browser = installFakeBrowser();
+  try {
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6, { aggregateDuplicates: false });
+    renderer.show('info', ['same', 'title', { timeOut: 0 }], () => undefined, {});
+    renderer.show('info', ['same', 'title', { timeOut: 0 }], () => undefined, {});
+
+    assert.equal(renderer.getStats().pending, 2);
+    assert.equal(renderer.getStats().aggregated, 0);
+    await Promise.resolve();
+    browser.frames.shift()(16);
+    assert.equal(renderer.getStats().active, 2);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('interactive duplicate notifications keep their independent click behavior', async () => {
+  const browser = installFakeBrowser();
+  try {
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6, { aggregateDuplicates: true });
+    renderer.show('warning', ['same', 'title', { timeOut: 0, onclick() {} }], () => undefined, {});
+    renderer.show('warning', ['same', 'title', { timeOut: 0, onclick() {} }], () => undefined, {});
+
+    assert.equal(renderer.getStats().pending, 2);
+    assert.equal(renderer.getStats().aggregated, 0);
+    await Promise.resolve();
+    browser.frames.shift()(16);
+    assert.equal(renderer.getStats().active, 2);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('redraw timers freeze while the document is hidden and resume when visible', async () => {
+  const browser = installFakeBrowser();
+  try {
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6);
+    const handle = renderer.show('success', ['timed', '', { timeOut: 5000, progressBar: true }], () => undefined, {});
+    await Promise.resolve();
+    browser.frames.shift()(16);
+
+    browser.setVisibility('hidden');
+    assert.equal(renderer.getStats().pausedForVisibility, 1);
+    assert.equal(renderer.getStats().visibilityPauses, 1);
+    browser.setVisibility('visible');
+    assert.equal(renderer.getStats().pausedForVisibility, 0);
+    assert.equal(renderer.clear(handle, { force: true, immediate: true }), true);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('local diagnostics use supported performance entries and can be reset', async () => {
+  let instance;
+  class FakePerformanceObserver {
+    static supportedEntryTypes = ['longtask'];
+    constructor(callback) {
+      this.callback = callback;
+      instance = this;
+    }
+    observe() {}
+    disconnect() {}
+    emit(entries) {
+      this.callback({ getEntries: () => entries });
+    }
+  }
+  const browser = installFakeBrowser({ performanceObserver: FakePerformanceObserver });
+  try {
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6, { diagnosticsEnabled: true });
+    renderer.show('info', ['diagnose', '', { timeOut: 0 }], () => undefined, {});
+    await Promise.resolve();
+    browser.frames.shift()(16);
+    instance.emit([{ duration: 72 }]);
+
+    assert.equal(renderer.getStats().observerType, 'longtask');
+    assert.equal(renderer.getStats().frameSamples, 1);
+    assert.equal(renderer.getStats().observedLongFrames, 1);
+    assert.equal(renderer.getStats().maxObservedLongFrameMs, 72);
+    renderer.resetDiagnostics();
+    assert.equal(renderer.getStats().rendered, 0);
+    assert.equal(renderer.getStats().observedLongFrames, 0);
     renderer.stop();
   } finally {
     browser.restore();

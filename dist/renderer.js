@@ -4,6 +4,8 @@ const TOAST_ATTRIBUTE = 'data-qyh-redraw-toast';
 const ADOPTED_ATTRIBUTE = 'data-qyh-adopted-toast';
 const MAX_PER_FRAME = 12;
 const MAX_PENDING = 100;
+const DUPLICATE_WINDOW_MS = 1000;
+const FRAME_BUDGET_MS = 1000 / 60;
 const DEFAULT_OPTIONS = {
     tapToDismiss: true,
     toastClass: 'toast',
@@ -78,6 +80,8 @@ function safelyCall(callback, onError, ...args) {
 export class LightweightToastRenderer {
     enabled = false;
     maxVisible = 6;
+    aggregateDuplicates = true;
+    diagnosticsEnabled = false;
     active = new Map();
     containers = new WeakMap();
     evicted = 0;
@@ -87,22 +91,43 @@ export class LightweightToastRenderer {
     pending = [];
     previousMessage;
     rendered = 0;
+    aggregated = 0;
+    pendingPeak = 0;
+    visibilityPauses = 0;
+    frameSamples = 0;
+    totalBatchMs = 0;
+    maxBatchMs = 0;
+    overBudgetBatches = 0;
+    observedLongFrames = 0;
+    maxObservedLongFrameMs = 0;
+    performanceObserver = null;
+    observerType = null;
+    visibilityTracking = false;
     onError;
     onRendered;
     onStateChanged;
+    handleVisibilityChange = () => this.syncVisibilityTimers();
     constructor({ onError = () => { }, onRendered = () => { }, onStateChanged = () => { } } = {}) {
         this.onError = onError;
         this.onRendered = onRendered;
         this.onStateChanged = onStateChanged;
     }
-    configure(enabled, maxVisible) {
+    configure(enabled, maxVisible, { aggregateDuplicates = true, diagnosticsEnabled = false, } = {}) {
         const nextEnabled = Boolean(enabled);
         this.maxVisible = normalizeMaxVisible(maxVisible);
         if (this.enabled && !nextEnabled)
             this.stop();
         this.enabled = nextEnabled;
-        if (this.enabled)
+        this.aggregateDuplicates = Boolean(aggregateDuplicates);
+        this.diagnosticsEnabled = Boolean(diagnosticsEnabled);
+        if (this.enabled) {
+            this.startVisibilityTracking();
+            this.configurePerformanceObserver();
             this.enforceVisibleLimit();
+        }
+        else {
+            this.stopPerformanceObserver();
+        }
         this.onStateChanged();
     }
     show(level, args, fallback, globalOptions) {
@@ -116,6 +141,17 @@ export class LightweightToastRenderer {
             const target = this.resolveTarget(options.target);
             if (!target)
                 return this.fallback(fallback);
+            const now = Date.now();
+            const duplicateKey = this.aggregateDuplicates && !options.preventDuplicates
+                ? this.createDuplicateKey(level, message, title, options, override)
+                : null;
+            if (duplicateKey) {
+                const duplicate = this.findDuplicate(duplicateKey, target, options.positionClass, now);
+                if (duplicate) {
+                    this.aggregateDuplicate(duplicate, options, now);
+                    return duplicate.handle;
+                }
+            }
             this.previousMessage = message;
             const element = document.createElement('div');
             const iconClass = String(asRecord(override).iconClass ?? options.iconClasses[level] ?? `toast-${level}`);
@@ -129,7 +165,21 @@ export class LightweightToastRenderer {
             };
             element.setAttribute(TOAST_ATTRIBUTE, String(response.toastId));
             const handle = this.createHandle(element);
-            this.pending.push({ element, fallback, handle, options, response, target, cancelled: false });
+            this.pending.push({
+                element,
+                fallback,
+                handle,
+                options,
+                response,
+                target,
+                cancelled: false,
+                duplicateCount: 1,
+                duplicateKey,
+                lastDuplicateAt: now,
+                shownCallbacks: [options.onShown],
+                hiddenCallbacks: [options.onHidden],
+            });
+            this.pendingPeak = Math.max(this.pendingPeak, this.pending.length);
             if (this.pending.length > MAX_PENDING) {
                 const overflow = this.pending.shift();
                 if (overflow) {
@@ -225,8 +275,11 @@ export class LightweightToastRenderer {
         this.pending.length = 0;
         this.enabled = false;
         this.previousMessage = undefined;
+        this.stopVisibilityTracking();
+        this.stopPerformanceObserver();
     }
     getStats() {
+        const pausedForVisibility = [...this.active.values()].filter(state => state.visibilityPaused).length;
         return {
             enabled: this.enabled,
             active: this.active.size,
@@ -235,7 +288,125 @@ export class LightweightToastRenderer {
             evicted: this.evicted,
             fallbacks: this.fallbacks,
             maxVisible: this.maxVisible,
+            aggregated: this.aggregated,
+            pendingPeak: this.pendingPeak,
+            visibilityPauses: this.visibilityPauses,
+            pausedForVisibility,
+            diagnosticsEnabled: this.diagnosticsEnabled,
+            frameSamples: this.frameSamples,
+            averageBatchMs: this.frameSamples > 0 ? this.totalBatchMs / this.frameSamples : 0,
+            maxBatchMs: this.maxBatchMs,
+            overBudgetBatches: this.overBudgetBatches,
+            observedLongFrames: this.observedLongFrames,
+            maxObservedLongFrameMs: this.maxObservedLongFrameMs,
+            observerType: this.observerType,
         };
+    }
+    resetDiagnostics() {
+        this.rendered = 0;
+        this.evicted = 0;
+        this.fallbacks = 0;
+        this.aggregated = 0;
+        this.pendingPeak = this.pending.length;
+        this.visibilityPauses = 0;
+        this.frameSamples = 0;
+        this.totalBatchMs = 0;
+        this.maxBatchMs = 0;
+        this.overBudgetBatches = 0;
+        this.observedLongFrames = 0;
+        this.maxObservedLongFrameMs = 0;
+        this.onStateChanged();
+    }
+    createDuplicateKey(level, message, title, options, override) {
+        if (options.onclick || options.onCloseClick)
+            return null;
+        const serialize = (value) => {
+            if (value === null)
+                return 'null';
+            if (value === undefined)
+                return 'undefined';
+            if (['string', 'number', 'boolean', 'bigint'].includes(typeof value)) {
+                const text = String(value);
+                return `${typeof value}:${text.length}:${text}`;
+            }
+            return null;
+        };
+        const messageKey = serialize(message);
+        const titleKey = serialize(title);
+        const iconClass = String(asRecord(override).iconClass ?? options.iconClasses[level] ?? '');
+        return messageKey !== null && titleKey !== null
+            ? [
+                level,
+                titleKey,
+                messageKey,
+                iconClass,
+                options.toastClass,
+                options.escapeHtml ? 'escape' : 'html',
+                options.closeButton ? 'close' : 'no-close',
+                options.tapToDismiss ? 'tap' : 'no-tap',
+                options.closeOnHover ? 'hover' : 'no-hover',
+                options.progressBar ? 'progress' : 'no-progress',
+                options.newestOnTop ? 'newest' : 'oldest',
+                String(options.showDuration),
+                String(options.hideDuration),
+                String(options.closeDuration),
+                String(options.timeOut),
+                String(options.extendedTimeOut),
+                options.titleClass,
+                options.messageClass,
+                options.rtl ? 'rtl' : 'ltr',
+            ].join('|')
+            : null;
+    }
+    findDuplicate(key, target, positionClass, now) {
+        const matches = (candidate) => (candidate.duplicateKey === key
+            && candidate.target === target
+            && candidate.options.positionClass === positionClass
+            && now - candidate.lastDuplicateAt <= DUPLICATE_WINDOW_MS);
+        for (let index = this.pending.length - 1; index >= 0; index -= 1) {
+            const candidate = this.pending[index];
+            if (candidate && !candidate.cancelled && matches(candidate))
+                return candidate;
+        }
+        const active = [...this.active.values()];
+        for (let index = active.length - 1; index >= 0; index -= 1) {
+            const candidate = active[index];
+            if (candidate && matches(candidate))
+                return candidate;
+        }
+        return null;
+    }
+    aggregateDuplicate(candidate, options, now) {
+        candidate.duplicateCount += 1;
+        candidate.lastDuplicateAt = now;
+        candidate.shownCallbacks.push(options.onShown);
+        candidate.hiddenCallbacks.push(options.onHidden);
+        this.aggregated += 1;
+        this.updateDuplicateBadge(candidate.element, candidate.duplicateCount);
+        const active = this.active.get(candidate.element);
+        if (active) {
+            safelyCall(options.onShown, this.onError);
+            if (!active.hoverPaused) {
+                const duration = active.options.timeOut;
+                this.restartProgress(active, duration);
+                this.scheduleDismiss(active, duration);
+            }
+        }
+        this.onStateChanged();
+    }
+    updateDuplicateBadge(element, count) {
+        let badge = element.querySelector('.qyh-toast-redraw-count');
+        if (count <= 1) {
+            badge?.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'qyh-toast-redraw-count';
+            element.append(badge);
+        }
+        badge.textContent = `×${count}`;
+        badge.setAttribute('aria-label', `重复 ${count} 次`);
     }
     fallback(callback) {
         this.fallbacks += 1;
@@ -298,6 +469,7 @@ export class LightweightToastRenderer {
         });
     }
     flushBatch() {
+        const startedAt = this.now();
         this.frameId = null;
         if (!this.enabled)
             return;
@@ -334,6 +506,14 @@ export class LightweightToastRenderer {
         this.enforceVisibleLimit();
         if (this.pending.length > 0)
             this.frameId = this.requestFrame(() => this.flushBatch());
+        if (this.diagnosticsEnabled) {
+            const duration = Math.max(0, this.now() - startedAt);
+            this.frameSamples += 1;
+            this.totalBatchMs += duration;
+            this.maxBatchMs = Math.max(this.maxBatchMs, duration);
+            if (duration > FRAME_BUDGET_MS)
+                this.overBudgetBatches += 1;
+        }
         this.onStateChanged();
     }
     toFragment(elements) {
@@ -373,6 +553,7 @@ export class LightweightToastRenderer {
         element.style.setProperty('--qyh-redraw-show-duration', `${options.showDuration}ms`);
         element.style.setProperty('--qyh-redraw-hide-duration', `${options.hideDuration}ms`);
         if (options.closeButton) {
+            element.classList.add('qyh-toast-redraw--has-close');
             const close = document.createElement('button');
             close.type = 'button';
             close.className = options.closeClass;
@@ -396,6 +577,7 @@ export class LightweightToastRenderer {
             progress.className = `${options.progressClass} qyh-toast-redraw-progress`;
             element.prepend(progress);
         }
+        this.updateDuplicateBadge(element, request.duplicateCount);
     }
     createContent(className, value, escapeHtml) {
         const content = document.createElement('div');
@@ -410,10 +592,22 @@ export class LightweightToastRenderer {
         const { element, options, response } = request;
         const state = {
             element,
+            handle: request.handle,
+            target: request.target,
             hideTimer: null,
             options,
             progressAnimation: null,
             response,
+            duplicateCount: request.duplicateCount,
+            duplicateKey: request.duplicateKey,
+            lastDuplicateAt: request.lastDuplicateAt,
+            shownCallbacks: request.shownCallbacks,
+            hiddenCallbacks: request.hiddenCallbacks,
+            timerDeadline: null,
+            remainingTime: 0,
+            timerAction: null,
+            hoverPaused: false,
+            visibilityPaused: false,
         };
         this.active.set(element, state);
         this.rendered += 1;
@@ -432,32 +626,145 @@ export class LightweightToastRenderer {
             state.progressAnimation = progress.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: options.timeOut, easing: 'linear', fill: 'forwards' });
         }
         this.scheduleDismiss(state, options.timeOut);
-        safelyCall(options.onShown, this.onError);
+        for (const callback of state.shownCallbacks)
+            safelyCall(callback, this.onError);
         this.onRendered();
     }
     scheduleDismiss(state, duration) {
-        if (state.hideTimer)
-            clearTimeout(state.hideTimer);
-        state.hideTimer = duration > 0
-            ? setTimeout(() => this.dismissElement(state.element, false, false, false), duration)
-            : null;
+        this.clearDismissTimer(state);
+        state.remainingTime = Math.max(0, duration);
+        state.timerAction = duration > 0 ? 'dismiss' : null;
+        if (!state.timerAction)
+            return;
+        if (this.isDocumentHidden()) {
+            if (!state.visibilityPaused)
+                this.visibilityPauses += 1;
+            state.visibilityPaused = true;
+            state.progressAnimation?.pause();
+            return;
+        }
+        this.armDismissTimer(state);
     }
     pause(state) {
-        if (state.hideTimer)
-            clearTimeout(state.hideTimer);
-        state.hideTimer = null;
+        state.hoverPaused = true;
+        this.clearDismissTimer(state);
+        state.timerAction = null;
+        state.remainingTime = 0;
         state.progressAnimation?.pause();
     }
     resume(state) {
         if (!this.active.has(state.element))
             return;
+        state.hoverPaused = false;
         const duration = state.options.extendedTimeOut || state.options.timeOut;
+        this.restartProgress(state, duration);
+        this.scheduleDismiss(state, duration);
+    }
+    restartProgress(state, duration) {
         state.progressAnimation?.cancel();
+        state.progressAnimation = null;
         const progress = state.element.querySelector('.qyh-toast-redraw-progress');
         if (progress && duration > 0 && typeof progress.animate === 'function') {
             state.progressAnimation = progress.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration, easing: 'linear', fill: 'forwards' });
+            if (this.isDocumentHidden())
+                state.progressAnimation.pause();
         }
-        this.scheduleDismiss(state, duration);
+    }
+    clearDismissTimer(state) {
+        if (state.hideTimer)
+            clearTimeout(state.hideTimer);
+        state.hideTimer = null;
+        state.timerDeadline = null;
+    }
+    armDismissTimer(state) {
+        if (state.timerAction !== 'dismiss' || state.hoverPaused || state.visibilityPaused)
+            return;
+        const duration = Math.max(0, state.remainingTime);
+        state.timerDeadline = Date.now() + duration;
+        state.hideTimer = setTimeout(() => {
+            state.hideTimer = null;
+            state.timerDeadline = null;
+            state.remainingTime = 0;
+            state.timerAction = null;
+            this.dismissElement(state.element, false, false, false);
+        }, duration);
+    }
+    startVisibilityTracking() {
+        if (this.visibilityTracking || typeof document.addEventListener !== 'function')
+            return;
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
+        this.visibilityTracking = true;
+    }
+    stopVisibilityTracking() {
+        if (!this.visibilityTracking || typeof document.removeEventListener !== 'function')
+            return;
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        this.visibilityTracking = false;
+    }
+    isDocumentHidden() {
+        return document.visibilityState === 'hidden' || document.hidden === true;
+    }
+    syncVisibilityTimers() {
+        const hidden = this.isDocumentHidden();
+        for (const state of this.active.values()) {
+            if (hidden) {
+                if (state.visibilityPaused || state.timerAction !== 'dismiss')
+                    continue;
+                if (state.hideTimer && state.timerDeadline !== null) {
+                    state.remainingTime = Math.max(0, state.timerDeadline - Date.now());
+                }
+                this.clearDismissTimer(state);
+                state.visibilityPaused = true;
+                state.progressAnimation?.pause();
+                this.visibilityPauses += 1;
+                continue;
+            }
+            if (!state.visibilityPaused)
+                continue;
+            state.visibilityPaused = false;
+            if (state.hoverPaused)
+                continue;
+            if (state.progressAnimation && typeof state.progressAnimation.play === 'function') {
+                state.progressAnimation.play();
+            }
+            this.armDismissTimer(state);
+        }
+        this.onStateChanged();
+    }
+    configurePerformanceObserver() {
+        this.stopPerformanceObserver();
+        if (!this.diagnosticsEnabled || typeof globalThis.PerformanceObserver !== 'function')
+            return;
+        const supported = globalThis.PerformanceObserver.supportedEntryTypes ?? [];
+        const type = supported.includes('long-animation-frame')
+            ? 'long-animation-frame'
+            : supported.includes('longtask')
+                ? 'longtask'
+                : null;
+        if (!type)
+            return;
+        try {
+            this.observerType = type;
+            this.performanceObserver = new globalThis.PerformanceObserver(list => {
+                for (const entry of list.getEntries()) {
+                    this.observedLongFrames += 1;
+                    this.maxObservedLongFrameMs = Math.max(this.maxObservedLongFrameMs, entry.duration);
+                }
+                this.onStateChanged();
+            });
+            this.performanceObserver.observe({ type, buffered: true });
+        }
+        catch {
+            this.stopPerformanceObserver();
+        }
+    }
+    stopPerformanceObserver() {
+        this.performanceObserver?.disconnect();
+        this.performanceObserver = null;
+        this.observerType = null;
+    }
+    now() {
+        return typeof globalThis.performance?.now === 'function' ? globalThis.performance.now() : Date.now();
     }
     dismissElement(element, force, immediate, close) {
         const pendingIndex = this.pending.findIndex(request => request.element === element);
@@ -474,9 +781,10 @@ export class LightweightToastRenderer {
             return;
         if (!force && document.activeElement && element.contains(document.activeElement))
             return;
-        if (state.hideTimer)
-            clearTimeout(state.hideTimer);
-        state.hideTimer = null;
+        this.clearDismissTimer(state);
+        state.timerAction = null;
+        state.remainingTime = 0;
+        state.visibilityPaused = false;
         state.progressAnimation?.cancel();
         if (immediate) {
             this.finishActive(state);
@@ -494,7 +802,8 @@ export class LightweightToastRenderer {
         request.element.remove();
         request.response.state = 'hidden';
         request.response.endTime = new Date();
-        safelyCall(request.options.onHidden, this.onError);
+        for (const callback of request.hiddenCallbacks)
+            safelyCall(callback, this.onError);
         if (evicted)
             this.evicted += 1;
         this.resetPreviousMessageIfEmpty();
@@ -503,8 +812,7 @@ export class LightweightToastRenderer {
     finishActive(state) {
         if (!this.active.delete(state.element))
             return;
-        if (state.hideTimer)
-            clearTimeout(state.hideTimer);
+        this.clearDismissTimer(state);
         state.progressAnimation?.cancel();
         const container = state.element.parentElement;
         state.element.removeAttribute(TOAST_ATTRIBUTE);
@@ -513,7 +821,8 @@ export class LightweightToastRenderer {
             container.remove();
         state.response.state = 'hidden';
         state.response.endTime = new Date();
-        safelyCall(state.options.onHidden, this.onError);
+        for (const callback of state.hiddenCallbacks)
+            safelyCall(callback, this.onError);
         this.resetPreviousMessageIfEmpty();
         this.onStateChanged();
     }

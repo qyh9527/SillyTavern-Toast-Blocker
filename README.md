@@ -2,6 +2,18 @@
 
 一个同时兼容原生 SillyTavern 与 TauriTavern 的 TypeScript 纯前端扩展。它既能分别屏蔽全局 `toastr` 产生的 Success、Info、Warning 与 Error，也能把未屏蔽的通知交给轻量重绘器。
 
+## 安装（置顶）
+
+> ### 🔵 [点击打开安装地址](https://github.com/qyh9527/SillyTavern-Toast-Blocker)
+
+在 SillyTavern 或 TauriTavern 的“扩展 → 安装扩展”中粘贴下面的地址：
+
+```text
+https://github.com/qyh9527/SillyTavern-Toast-Blocker
+```
+
+安装后重启一次酒馆。首次安装当页会立即处理后续 Toast；重启后，前置规则才能覆盖扩展脚本加载前出现的启动通知。
+
 ## 为什么不是简单覆盖 `toastr`
 
 原生 SillyTavern 会按照 `manifest.json` 的 `loading_order` 从小到大激活扩展；因此本扩展使用 `-100000`，尽量早于普通第三方扩展运行。但 TauriTavern 会先完成主界面并发出 `APP_READY`，之后才延迟激活普通第三方扩展。单纯在扩展入口覆盖 `toastr`，无法可靠覆盖 TauriTavern 的启动阶段。
@@ -24,27 +36,22 @@
 
 因此，默认四类全部屏蔽时，即使打开重绘器也不会显示 Toast。请取消勾选希望重绘的类型。
 
-重绘器针对通知风暴做了以下约束：同步调用先进入内存队列，以微任务合并同一轮请求，再在 `requestAnimationFrame` 中每帧最多创建 12 个；同一容器使用 `DocumentFragment` 批量写入；最大可见数限制为 1–20；入场、退场与进度条只使用 `transform`/`opacity`，进度由 Web Animations 驱动，不使用高频轮询。无效自定义挂载目标或内部异常会回退到原生 Toast。
+重绘器针对通知风暴做了以下约束：同步调用先进入内存队列，以微任务合并同一轮请求，再在 `requestAnimationFrame` 中每帧最多创建 12 个；同一容器使用 `DocumentFragment` 批量写入；最大可见数限制为 1–20；入场、退场与进度条只使用 `transform`/`opacity`，进度由 Web Animations 驱动，不使用高频轮询。1 秒内内容和关键选项相同的重复通知可聚合为一张卡片并显示次数；带独立点击回调的交互通知不会合并。无效自定义挂载目标或内部异常会回退到原生 Toast。
 
 启用重绘器后还会写入一条启动接管规则：扩展脚本加载前先隐藏原生 Toast，接管时移动已有节点到重绘容器，保留其中链接、按钮及事件，然后统一补上整卡点击关闭。若扩展未能启动，隐藏会在 8 秒后自动释放，避免通知永久不可见。
 
-## 安装
-
-在 SillyTavern 或 TauriTavern 的“扩展 → 安装扩展”中填入：
-
-```text
-https://github.com/qyh9527/SillyTavern-Toast-Blocker
-```
-
-安装后重启一次酒馆。首次安装当页会立即屏蔽后续 Toast，但重启后才能覆盖更早的启动阶段。
+重绘器创建的定时 Toast 使用基于剩余时长与截止时间的计时：页面进入后台、锁屏或 WebView 暂停时冻结，回到前台后继续，避免移动端定时器节流造成通知集中消失或停留过久。
 
 ## 操作面板
 
 扩展设置栏中会出现“Toast 屏蔽与重绘器”：
 
 - **启用分类屏蔽**：总开关；关闭后立即恢复原生 Toast，并清除持久规则。
-- **Success / Info / Warning / Error**：四类可独立勾选，也可一键全部选择或全部取消；更改后立即生效并同步前置 CSS。移动端保持紧凑的 2×2 卡片布局，整卡可点，并提供清晰的选中态与键盘焦点。
+- **Success / Info / Warning / Error**：四类可独立选择，也可一键全部选择或全部取消；更改后立即生效并同步前置 CSS。移动端保持紧凑的 2×2 卡片布局，整卡可点；胶囊开关不使用字符勾号，开启时卡片高亮，关闭时灰暗。
 - **高性能重绘器**：异步重绘所有未被屏蔽的 Toast；屏蔽选择始终优先。
+- **后台计时保护**：重绘 Toast 在页面隐藏时冻结剩余时长，恢复可见后从正确位置继续计时。
+- **重复通知聚合**：默认把 1 秒内内容与关键行为相同的通知合并，并以 `×N` 显示累计次数；可独立关闭。
+- **本地性能诊断**：按需统计已重绘、已聚合、队列峰值、后台暂停、批次耗时和可用的页面长帧；数据只保存在当前页面内存，不读取正文、不上传。
 - **点击关闭**：所有重绘或启动阶段接管的 Toast 均可点击卡片关闭；卡片中的链接和按钮仍会先执行自身操作。
 - **最大同时显示**：允许 1–20 个，默认 6 个；超过上限立即淘汰最早的重绘 Toast。
 - **控制台记录**：只记录被拦截 Toast 的级别与计数，不记录正文。
@@ -61,6 +68,9 @@ ToastBlocker.disable();
 ToastBlocker.repair();
 ToastBlocker.setLevel('warning', false);
 ToastBlocker.redraw(true);
+ToastBlocker.aggregate(true);
+ToastBlocker.diagnostics(true);
+ToastBlocker.resetDiagnostics();
 ToastBlocker.shutdown();
 ```
 
@@ -70,7 +80,8 @@ ToastBlocker.shutdown();
 
 ## 兼容性与边界
 
-- 面向 SillyTavern `1.12.13+` 以及采用同一扩展契约的当前 TauriTavern。
+- 面向 SillyTavern `1.12.13+` 以及采用同一扩展契约的当前 TauriTavern。TauriTavern 官方列出的 Windows、Linux、Android 与 iOS 均在兼容目标内，macOS 同样适用。
+- 不依赖 Node.js、Tauri 私有命令或特定 WebView 全局对象；运行时仅使用浏览器标准 API，并对性能观察能力做特性检测。Windows WebView2、Linux WebKitGTK、iOS/macOS WKWebView 与 Android System WebView 不支持的增强诊断会自动降级，不影响屏蔽与重绘主功能。
 - 只处理当前主文档中的全局 `toastr`。跨域 iframe 拥有独立文档和脚本上下文，浏览器安全模型不允许本扩展控制它。
 - 本扩展不会吞掉业务异常、网络错误或控制台日志，只移除所选类型的 Toast 视觉通知。屏蔽 Error 或 Warning 可能使重要问题不再显眼，请按需查看开发者控制台。
 - 重绘器保留 Toastr 常用的标题、正文、类型、关闭按钮、点击/悬停、超时、进度条、回调、位置、RTL、`clear/remove` 等契约；极少见的第三方自定义 DOM 模板或直接操作原生 `#toast-container` 的代码不保证完全等价。
@@ -83,8 +94,11 @@ ToastBlocker.shutdown();
 - [SillyTavern 扩展加载器](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/extensions.js)：按 `loading_order` 排序并顺序激活扩展。
 - [SillyTavern 自定义 CSS 加载实现](https://github.com/SillyTavern/SillyTavern/blob/release/public/scripts/power-user.js)：用户 CSS 在设置加载阶段恢复。
 - [TauriTavern 第三方扩展兼容说明](https://github.com/Darkatse/TauriTavern/blob/main/docs/CurrentState/ThirdPartyExtensions.md)：第三方扩展在 `APP_READY` 后延迟激活。
+- [TauriTavern 平台说明](https://github.com/Darkatse/TauriTavern/blob/main/README.en.md)：Windows、macOS、Linux、Android 与 iOS 支持范围。
+- [Tauri WebView 版本说明](https://v2.tauri.app/reference/webview-versions/) 与 [进程模型](https://v2.tauri.app/concept/process-model/)：各平台使用的系统 WebView 以及跨平台差异。
 - [Toastr 2.1.3 项目](https://github.com/CodeSeven/toastr)：全局 API 与容器行为。
 - [MDN：`requestAnimationFrame`](https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame) 与 [微任务指南](https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide)：批处理的调度边界。
+- [MDN：Page Visibility API](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API) 与 [`PerformanceObserver.supportedEntryTypes`](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver/supportedEntryTypes_static)：后台计时纠偏和诊断能力检测。
 - [web.dev：避免布局抖动](https://web.dev/articles/avoid-large-complex-layouts-and-layout-thrashing) 与 [高性能 CSS 动画](https://web.dev/articles/animations-guide)：集中 DOM 写入，并优先使用 `transform`/`opacity`。
 - [W3C：`role=status`](https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA22) 与 [W3C：`role=alert`](https://www.w3.org/WAI/WCAG22/Techniques/aria/ARIA19)：通知的无障碍语义。
 

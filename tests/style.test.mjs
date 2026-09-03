@@ -20,3 +20,12 @@ test('toast type cards expose selected, focus and reduced-motion states', () => 
   assert.match(css, /\.qyh-toast-blocker-level:focus-within/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
+
+test('panel toggles use host-style-resistant pills without checkmark glyphs', () => {
+  assert.match(css, /\.checkbox_label input\[type="checkbox"\]/);
+  assert.match(css, /border-radius:\s*999px\s*!important/);
+  assert.match(css, /content:\s*none\s*!important/);
+  assert.match(css, /content:\s*""\s*!important/);
+  assert.doesNotMatch(css, /content:\s*["']✓["']/);
+  assert.match(css, /translate3d\(1rem,\s*-50%,\s*0\)/);
+});

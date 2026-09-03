@@ -1,0 +1,39 @@
+#qyh-toast-blocker-panel .inline-drawer-content {
+  padding: 0.75rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 15%, transparent);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-help {
+  margin: 0.25rem 0 0;
+  color: var(--grey70, #aaa);
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-status {
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent);
+  overflow-wrap: anywhere;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-actions .menu_button {
+  width: auto;
+  min-width: 8rem;
+}

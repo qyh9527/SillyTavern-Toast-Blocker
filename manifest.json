@@ -1,0 +1,23 @@
+{
+  "display_name": "Toast 全局屏蔽器",
+  "loading_order": -100000,
+  "requires": [],
+  "optional": [],
+  "dependencies": [],
+  "js": "dist/index.js",
+  "css": "style.css",
+  "hooks": {
+    "install": "onInstall",
+    "update": "onUpdate",
+    "delete": "onDelete",
+    "clean": "onClean",
+    "enable": "onEnable",
+    "disable": "onDisable",
+    "activate": "onActivate"
+  },
+  "author": "qyh9527",
+  "version": "1.0.0",
+  "homePage": "https://github.com/qyh9527/SillyTavern-Toast-Blocker",
+  "auto_update": true,
+  "minimum_client_version": "1.12.13"
+}

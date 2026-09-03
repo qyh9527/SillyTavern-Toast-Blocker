@@ -1,5 +1,6 @@
 import { type ToastLevel, type ToastBlockerSettings } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
+import { type TimedConfirmation } from './interaction.js';
 interface PublicStatus extends Record<string, unknown> {
     enabled: boolean;
     redrawEnabled: boolean;
@@ -19,6 +20,7 @@ declare class ToastBlockerHost {
     statusText: string;
     bootPromise: Promise<void> | null;
     runtime: ToastRuntimeBlocker;
+    refreshConfirmation: TimedConfirmation;
     constructor();
     activate({ forceSave }?: {
         forceSave?: boolean;
@@ -37,6 +39,8 @@ declare class ToastBlockerHost {
     setRedrawEnabled(enabled: boolean): Promise<void>;
     setRedrawMaxVisible(value: unknown): Promise<void>;
     shutdown(): Promise<void>;
+    requestFrontendRefresh(button: HTMLButtonElement): Promise<void>;
+    resetRefreshButton(): void;
     applyRuntimeSettings(): void;
     persistPreloadCss(enabled: boolean, levels: ToastBlockerSettings['blockedLevels'], forceSave: boolean): Promise<boolean>;
     forceSave(): Promise<void>;

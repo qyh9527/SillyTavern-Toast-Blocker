@@ -13,6 +13,8 @@ import {
   updateManagedCss,
 } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
+import { createTimedConfirmation, type TimedConfirmation } from './interaction.js';
+import { scheduleFrontendReload } from './reload.js';
 
 const APP_ID = 'qyh-toast-blocker';
 const INSTANCE_KEY = Symbol.for('qyh9527.sillytavern.toastBlocker');
@@ -37,6 +39,7 @@ class ToastBlockerHost {
   statusText = '';
   bootPromise: Promise<void> | null = null;
   runtime: ToastRuntimeBlocker;
+  refreshConfirmation: TimedConfirmation;
 
   constructor() {
     const stored = normalizeSettings(extension_settings[SETTINGS_KEY]);
@@ -50,6 +53,14 @@ class ToastBlockerHost {
         this.renderStatus();
       },
       onStateChanged: () => this.renderStatus(),
+    });
+    this.refreshConfirmation = createTimedConfirmation({
+      timeoutMs: 5000,
+      onExpired: () => {
+        this.resetRefreshButton();
+        this.statusText = '刷新确认已自动取消，页面未刷新';
+        this.renderStatus();
+      },
     });
   }
 
@@ -84,6 +95,7 @@ class ToastBlockerHost {
   }
 
   async clean(): Promise<void> {
+    this.refreshConfirmation.cancel();
     this.runtime.configure({
       blockerEnabled: false,
       blockedLevels: this.settings.blockedLevels,
@@ -174,6 +186,39 @@ class ToastBlockerHost {
     await this.persistPreloadCss(false, this.settings.blockedLevels, true);
     this.statusText = '屏蔽器与重绘器均已关闭，早期规则已清理';
     this.renderStatus();
+  }
+
+  async requestFrontendRefresh(button: HTMLButtonElement): Promise<void> {
+    if (this.refreshConfirmation.activate() === 'armed') {
+      button.classList.add('qyh-toast-blocker-refresh--armed');
+      button.textContent = '再次点击确认刷新（5 秒内）';
+      button.setAttribute('aria-label', '再次点击确认立即刷新前端');
+      this.statusText = '防误触确认：5 秒内再次点击才会刷新';
+      this.renderStatus();
+      return;
+    }
+
+    button.classList.remove('qyh-toast-blocker-refresh--armed');
+    button.disabled = true;
+    button.textContent = '正在保存并刷新…';
+    this.statusText = '正在保存设置，随后刷新前端…';
+    this.renderStatus();
+    try {
+      await this.forceSave();
+      scheduleFrontendReload();
+    } catch {
+      button.disabled = false;
+      this.resetRefreshButton();
+    }
+  }
+
+  resetRefreshButton(): void {
+    const button = this.panel?.querySelector<HTMLButtonElement>(`#${APP_ID}-refresh`);
+    if (!button) return;
+    button.disabled = false;
+    button.classList.remove('qyh-toast-blocker-refresh--armed');
+    button.textContent = '立即刷新前端';
+    button.setAttribute('aria-label', '立即刷新前端，需要连续确认两次');
   }
 
   applyRuntimeSettings(): void {
@@ -317,6 +362,10 @@ class ToastBlockerHost {
           </label>
         </div>
         <div class="qyh-toast-blocker-status" id="${APP_ID}-status" role="status"></div>
+        <div class="qyh-toast-blocker-refresh-area">
+          <button id="${APP_ID}-refresh" class="menu_button qyh-toast-blocker-refresh" type="button" aria-label="立即刷新前端，需要连续确认两次" aria-describedby="${APP_ID}-refresh-help">立即刷新前端</button>
+          <div id="${APP_ID}-refresh-help" class="qyh-toast-blocker-help">防误触：首次点击只进入确认状态，5 秒内再次点击才会保存设置并刷新。</div>
+        </div>
         <div class="qyh-toast-blocker-actions">
           <button id="${APP_ID}-repair" class="menu_button">修复早期规则</button>
           <button id="${APP_ID}-cleanup" class="menu_button">关闭并清理</button>
@@ -360,6 +409,9 @@ class ToastBlockerHost {
     });
     wrapper.querySelector(`#${APP_ID}-cleanup`)?.addEventListener('click', () => {
       void this.shutdown().catch(() => {});
+    });
+    wrapper.querySelector<HTMLButtonElement>(`#${APP_ID}-refresh`)?.addEventListener('click', event => {
+      void this.requestFrontendRefresh(event.currentTarget as HTMLButtonElement);
     });
     this.renderStatus();
   }

@@ -98,6 +98,36 @@
   overflow-wrap: anywhere;
 }
 
+#qyh-toast-blocker-panel .qyh-toast-blocker-refresh-area {
+  margin: 0.85rem 0;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, #ff9f43 55%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, #ff9f43 10%, transparent);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-refresh {
+  width: 100%;
+  min-height: 2.8rem;
+  border: 1px solid color-mix(in srgb, #ff9f43 75%, white);
+  background: linear-gradient(135deg, #c76020, #e58b25);
+  box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 22%);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-refresh:hover,
+#qyh-toast-blocker-panel .qyh-toast-blocker-refresh:focus-visible {
+  filter: brightness(1.1);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-refresh--armed {
+  border-color: #ff5757;
+  background: linear-gradient(135deg, #a92828, #dd3e3e);
+  box-shadow: 0 0 0 0.18rem rgb(255 87 87 / 24%);
+}
+
 #qyh-toast-blocker-panel .qyh-toast-blocker-actions {
   display: flex;
   flex-wrap: wrap;

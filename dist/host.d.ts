@@ -1,7 +1,8 @@
-import { type ToastBlockerSettings } from './core.js';
+import { type ToastLevel, type ToastBlockerSettings } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
 interface PublicStatus extends Record<string, unknown> {
     enabled: boolean;
+    blockedMethods: ToastLevel[];
     guardedMethods: number;
     observingDom: boolean;
     runtimeStyle: boolean;
@@ -29,8 +30,10 @@ declare class ToastBlockerHost {
         forceSave?: boolean;
     }): Promise<void>;
     setEnabled(enabled: boolean): Promise<void>;
+    setLevel(level: ToastLevel, blocked: boolean): Promise<void>;
+    setAllLevels(blocked: boolean): Promise<void>;
     setLogging(enabled: boolean): Promise<void>;
-    persistPreloadCss(enabled: boolean, forceSave: boolean): Promise<boolean>;
+    persistPreloadCss(enabled: boolean, levels: ToastBlockerSettings['blockedLevels'], forceSave: boolean): Promise<boolean>;
     forceSave(): Promise<void>;
     mountPanelWhenReady(): Promise<void>;
     renderStatus(): void;

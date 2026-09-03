@@ -1,6 +1,6 @@
 # SillyTavern Toast Blocker
 
-一个同时兼容原生 SillyTavern 与 TauriTavern 的纯前端扩展，用于屏蔽主界面中由全局 `toastr` 产生的全部 Toast 展示。
+一个同时兼容原生 SillyTavern 与 TauriTavern 的纯前端扩展，可分别屏蔽主界面中由全局 `toastr` 产生的 Success、Info、Warning 与 Error Toast。
 
 ## 为什么不是简单覆盖 `toastr`
 
@@ -10,7 +10,7 @@
 
 1. **重启前置规则**：首次运行时，把一段带唯一边界标记的隐藏规则写入酒馆的“自定义 CSS”。下一次启动时，这段规则会早于第三方扩展恢复。
 2. **运行时方法守卫**：拦截 `toastr.success/info/warning/error`；后加载脚本重新赋值这些方法时，守卫仍然有效。
-3. **DOM 兜底**：移除已有或由旧函数引用新建的 `#toast-container`，防止只覆盖全局方法造成漏网。
+3. **DOM 兜底**：按类型移除已有或由旧函数引用新建的 Toast 节点，防止只覆盖全局方法造成漏网。
 
 关闭开关、在扩展管理器禁用扩展，或删除扩展时，都会移除本扩展自己的持久 CSS。用户原有的自定义 CSS 不会被整体覆盖。
 
@@ -28,7 +28,8 @@ https://github.com/qyh9527/SillyTavern-Toast-Blocker
 
 扩展设置栏中会出现“Toast 全局屏蔽器”：
 
-- **屏蔽全部 Toast**：总开关；关闭后立即恢复原生 Toast，并清除持久规则。
+- **启用分类屏蔽**：总开关；关闭后立即恢复原生 Toast，并清除持久规则。
+- **Success / Info / Warning / Error**：四类可独立勾选，也可一键全部选择或全部取消；更改后立即生效并同步前置 CSS。
 - **控制台记录**：只记录被拦截 Toast 的级别与计数，不记录正文。
 - **修复早期规则**：重新写入并保存带边界标记的前置 CSS。
 - **关闭并清理**：等同于关闭总开关。
@@ -40,13 +41,14 @@ ToastBlocker.status();
 ToastBlocker.enable();
 ToastBlocker.disable();
 ToastBlocker.repair();
+ToastBlocker.setLevel('warning', false);
 ```
 
 ## 兼容性与边界
 
 - 面向 SillyTavern `1.12.13+` 以及采用同一扩展契约的当前 TauriTavern。
 - 只处理当前主文档中的全局 `toastr`。跨域 iframe 拥有独立文档和脚本上下文，浏览器安全模型不允许本扩展控制它。
-- 本扩展不会吞掉业务异常、网络错误或控制台日志，只移除 Toast 这一层视觉通知。彻底关闭全部 Toast 可能使重要错误不再显眼，请按需查看开发者控制台。
+- 本扩展不会吞掉业务异常、网络错误或控制台日志，只移除所选类型的 Toast 视觉通知。屏蔽 Error 或 Warning 可能使重要问题不再显眼，请按需查看开发者控制台。
 - 若在不支持生命周期清理 hook 的旧版宿主上直接删除扩展，可在“用户设置 → 自定义 CSS”中删除 `SillyTavern Toast Blocker: managed start/end` 标记之间的区块。
 
 ## 设计依据

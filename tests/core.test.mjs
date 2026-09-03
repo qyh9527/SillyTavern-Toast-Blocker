@@ -11,11 +11,24 @@ import {
 } from '../dist/core.js';
 
 test('settings default to enabled and normalize malformed values', () => {
-  assert.deepEqual(normalizeSettings(undefined), { enabled: true, logSuppressed: false, schemaVersion: 1 });
+  const allBlocked = { success: true, info: true, warning: true, error: true };
+  assert.deepEqual(normalizeSettings(undefined), {
+    enabled: true,
+    blockedLevels: allBlocked,
+    logSuppressed: false,
+    schemaVersion: 2,
+  });
   assert.deepEqual(normalizeSettings({ enabled: 0, logSuppressed: 1 }), {
     enabled: false,
+    blockedLevels: allBlocked,
     logSuppressed: true,
-    schemaVersion: 1,
+    schemaVersion: 2,
+  });
+  assert.deepEqual(normalizeSettings({ blockedLevels: { success: false, error: 0 } }).blockedLevels, {
+    success: false,
+    info: true,
+    warning: true,
+    error: false,
   });
 });
 
@@ -26,6 +39,25 @@ test('managed CSS round-trip preserves user CSS exactly', () => {
   assert.equal(stripManagedCss(installed), userCss);
   assert.equal(updateManagedCss(installed, true), installed);
   assert.equal(updateManagedCss(installed, false), userCss);
+});
+
+test('managed CSS targets only selected toast classes', () => {
+  const installed = updateManagedCss('', true, {
+    success: false,
+    info: true,
+    warning: false,
+    error: true,
+  });
+  assert.match(installed, /\.toast-info/);
+  assert.match(installed, /\.toast-error/);
+  assert.doesNotMatch(installed, /\.toast-success/);
+  assert.doesNotMatch(installed, /\.toast-warning/);
+  assert.equal(updateManagedCss(installed, true, {
+    success: false,
+    info: false,
+    warning: false,
+    error: false,
+  }), '');
 });
 
 test('duplicate managed blocks are removed without touching surrounding rules', () => {
@@ -58,4 +90,18 @@ test('toastr guard suppresses calls, accepts later replacements, then restores l
 
 test('guard gracefully declines invalid targets', () => {
   assert.equal(guardToastrMethods(null), null);
+});
+
+test('toastr guard leaves unselected methods completely native', () => {
+  const toastr = {
+    success: message => `success:${message}`,
+    info: message => `info:${message}`,
+    warning: message => `warning:${message}`,
+    error: message => `error:${message}`,
+  };
+  const guard = guardToastrMethods(toastr, { methods: ['error'], createResult: () => 'hidden' });
+  assert.equal(guard.guardedCount, 1);
+  assert.equal(toastr.success('visible'), 'success:visible');
+  assert.equal(toastr.error('blocked'), 'hidden');
+  guard.restore();
 });

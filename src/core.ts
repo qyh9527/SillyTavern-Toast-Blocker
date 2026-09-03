@@ -3,11 +3,13 @@ export const BLOCK_START = '/* SillyTavern Toast Blocker: managed start */';
 export const BLOCK_END = '/* SillyTavern Toast Blocker: managed end */';
 export const TOAST_METHODS = Object.freeze(['success', 'info', 'warning', 'error'] as const);
 export type ToastLevel = (typeof TOAST_METHODS)[number];
+export type BlockedToastLevels = Record<ToastLevel, boolean>;
 
 export interface ToastBlockerSettings {
   enabled: boolean;
+  blockedLevels: BlockedToastLevels;
   logSuppressed: boolean;
-  schemaVersion: 1;
+  schemaVersion: 2;
 }
 
 export interface SuppressedToast {
@@ -15,18 +17,18 @@ export interface SuppressedToast {
   args: unknown[];
 }
 
-export const MANAGED_RULES = `${BLOCK_START}
-#toast-container {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-${BLOCK_END}`;
+export const DEFAULT_BLOCKED_LEVELS: Readonly<BlockedToastLevels> = Object.freeze({
+  success: true,
+  info: true,
+  warning: true,
+  error: true,
+});
 
 const DEFAULT_SETTINGS: Readonly<ToastBlockerSettings> = Object.freeze({
   enabled: true,
+  blockedLevels: DEFAULT_BLOCKED_LEVELS as BlockedToastLevels,
   logSuppressed: false,
-  schemaVersion: 1,
+  schemaVersion: 2,
 });
 
 function escapeRegExp(value: string): string {
@@ -42,11 +44,39 @@ export function normalizeSettings(value: unknown): ToastBlockerSettings {
   const candidate = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<ToastBlockerSettings>
     : {};
+  const levels = candidate.blockedLevels && typeof candidate.blockedLevels === 'object'
+    ? candidate.blockedLevels as Partial<BlockedToastLevels>
+    : {};
   return {
     enabled: candidate.enabled === undefined ? DEFAULT_SETTINGS.enabled : Boolean(candidate.enabled),
+    blockedLevels: {
+      success: levels.success === undefined ? true : Boolean(levels.success),
+      info: levels.info === undefined ? true : Boolean(levels.info),
+      warning: levels.warning === undefined ? true : Boolean(levels.warning),
+      error: levels.error === undefined ? true : Boolean(levels.error),
+    },
     logSuppressed: Boolean(candidate.logSuppressed),
     schemaVersion: DEFAULT_SETTINGS.schemaVersion,
   };
+}
+
+export function getBlockedMethods(levels: BlockedToastLevels): ToastLevel[] {
+  return TOAST_METHODS.filter(level => levels[level]);
+}
+
+export function buildManagedRules(levels: BlockedToastLevels): string {
+  const blocked = getBlockedMethods(levels);
+  if (blocked.length === 0) return '';
+  const selectors = blocked.length === TOAST_METHODS.length
+    ? '#toast-container'
+    : blocked.map(level => `#toast-container > .toast-${level}`).join(',\n');
+  return `${BLOCK_START}
+${selectors} {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+${BLOCK_END}`;
 }
 
 export function hasManagedCss(css: unknown): boolean {
@@ -60,9 +90,14 @@ export function stripManagedCss(css: unknown): string {
   return (typeof css === 'string' ? css : '').replace(BLOCK_PATTERN, '');
 }
 
-export function updateManagedCss(css: unknown, enabled: boolean): string {
+export function updateManagedCss(
+  css: unknown,
+  enabled: boolean,
+  levels: BlockedToastLevels = { ...DEFAULT_BLOCKED_LEVELS },
+): string {
   const clean = stripManagedCss(css);
-  return enabled ? `${clean}\n${MANAGED_RULES}\n` : clean;
+  const rules = enabled ? buildManagedRules(levels) : '';
+  return rules ? `${clean}\n${rules}\n` : clean;
 }
 
 /**
@@ -75,6 +110,7 @@ export interface ToastrGuard {
 }
 
 interface GuardOptions {
+  methods?: readonly ToastLevel[];
   onSuppressed?: (toast: SuppressedToast) => void;
   createResult?: (level: ToastLevel, args: unknown[]) => unknown;
 }
@@ -87,12 +123,16 @@ interface GuardRecord {
 
 export function guardToastrMethods(
   target: Record<string, unknown> | null | undefined,
-  { onSuppressed = () => {}, createResult = () => undefined }: GuardOptions = {},
+  {
+    methods = TOAST_METHODS,
+    onSuppressed = () => {},
+    createResult = () => undefined,
+  }: GuardOptions = {},
 ): ToastrGuard | null {
   if (!target || typeof target !== 'object') return null;
 
   const records: GuardRecord[] = [];
-  for (const method of TOAST_METHODS) {
+  for (const method of new Set(methods)) {
     const descriptor = Object.getOwnPropertyDescriptor(target, method);
     if (descriptor && descriptor.configurable === false) continue;
 

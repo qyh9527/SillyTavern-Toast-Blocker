@@ -1,7 +1,7 @@
 import { saveSettings, saveSettingsDebounced } from '/script.js';
 import { extension_settings } from '/scripts/extensions.js';
 import { power_user } from '/scripts/power-user.js';
-import { SETTINGS_KEY, hasManagedCss, normalizeSettings, updateManagedCss, } from './core.js';
+import { SETTINGS_KEY, TOAST_METHODS, getBlockedMethods, hasManagedCss, normalizeSettings, updateManagedCss, } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
 const APP_ID = 'qyh-toast-blocker';
 const INSTANCE_KEY = Symbol.for('qyh9527.sillytavern.toastBlocker');
@@ -48,19 +48,19 @@ class ToastBlockerHost {
     }
     async disableFromLifecycle() {
         this.runtime.setEnabled(false);
-        await this.persistPreloadCss(false, true);
+        await this.persistPreloadCss(false, this.settings.blockedLevels, true);
     }
     async clean() {
         this.runtime.setEnabled(false);
-        await this.persistPreloadCss(false, false);
+        await this.persistPreloadCss(false, this.settings.blockedLevels, false);
         delete extension_settings[SETTINGS_KEY];
         await this.forceSave();
         this.panel?.remove();
         this.panel = null;
     }
     async applyPreference({ forceSave = false } = {}) {
-        this.runtime.setEnabled(this.settings.enabled);
-        await this.persistPreloadCss(this.settings.enabled, forceSave);
+        this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, forceSave);
         this.renderStatus();
     }
     async setEnabled(enabled) {
@@ -68,10 +68,34 @@ class ToastBlockerHost {
         extension_settings[SETTINGS_KEY] = this.settings;
         this.statusText = '正在保存…';
         this.renderStatus();
-        this.runtime.setEnabled(this.settings.enabled);
-        await this.persistPreloadCss(this.settings.enabled, true);
+        this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
         this.preloadPresentAtBoot = false;
-        this.statusText = this.settings.enabled ? '已启用；重启后可覆盖启动阶段' : '已关闭并移除早期规则';
+        this.statusText = this.settings.enabled
+            ? '已启用；已保存所选类型，重启后可覆盖启动阶段'
+            : '已关闭并移除早期规则';
+        this.renderStatus();
+    }
+    async setLevel(level, blocked) {
+        this.settings.blockedLevels[level] = Boolean(blocked);
+        extension_settings[SETTINGS_KEY] = this.settings;
+        this.statusText = '正在保存类型设置…';
+        this.renderStatus();
+        this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
+        this.preloadPresentAtBoot = false;
+        const count = getBlockedMethods(this.settings.blockedLevels).length;
+        this.statusText = count > 0 ? `已保存：当前屏蔽 ${count} 类 Toast` : '已保存：当前不屏蔽任何类型';
+        this.renderStatus();
+    }
+    async setAllLevels(blocked) {
+        for (const level of TOAST_METHODS)
+            this.settings.blockedLevels[level] = blocked;
+        extension_settings[SETTINGS_KEY] = this.settings;
+        this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
+        this.preloadPresentAtBoot = false;
+        this.statusText = blocked ? '已选择全部四类 Toast' : '已取消全部类型';
         this.renderStatus();
     }
     async setLogging(enabled) {
@@ -80,9 +104,9 @@ class ToastBlockerHost {
         await this.forceSave();
         this.renderStatus();
     }
-    async persistPreloadCss(enabled, forceSave) {
+    async persistPreloadCss(enabled, levels, forceSave) {
         const before = typeof power_user.custom_css === 'string' ? power_user.custom_css : '';
-        const after = updateManagedCss(before, enabled);
+        const after = updateManagedCss(before, enabled, levels);
         if (before === after) {
             if (forceSave)
                 await this.forceSave();
@@ -151,14 +175,37 @@ class ToastBlockerHost {
       <div class="inline-drawer-content">
         <div class="qyh-toast-blocker-row">
           <div>
-            <strong>屏蔽全部 Toast</strong>
-            <div class="qyh-toast-blocker-help">同时启用早期 CSS、方法守卫和 DOM 清理。</div>
+            <strong>启用分类屏蔽</strong>
+            <div class="qyh-toast-blocker-help">所选类型同时使用早期 CSS、方法守卫和 DOM 清理。</div>
           </div>
-          <label class="checkbox_label" title="屏蔽全部 Toast">
+          <label class="checkbox_label" title="启用所选类型的 Toast 屏蔽">
             <input id="${APP_ID}-enabled" type="checkbox">
             <span>启用</span>
           </label>
         </div>
+        <fieldset class="qyh-toast-blocker-levels">
+          <legend>要屏蔽的 Toast 类型</legend>
+          <label class="qyh-toast-blocker-level qyh-toast-blocker-level--success">
+            <input data-toast-level="success" type="checkbox">
+            <span><strong>Success</strong><small>成功</small></span>
+          </label>
+          <label class="qyh-toast-blocker-level qyh-toast-blocker-level--info">
+            <input data-toast-level="info" type="checkbox">
+            <span><strong>Info</strong><small>信息</small></span>
+          </label>
+          <label class="qyh-toast-blocker-level qyh-toast-blocker-level--warning">
+            <input data-toast-level="warning" type="checkbox">
+            <span><strong>Warning</strong><small>警告</small></span>
+          </label>
+          <label class="qyh-toast-blocker-level qyh-toast-blocker-level--error">
+            <input data-toast-level="error" type="checkbox">
+            <span><strong>Error</strong><small>错误</small></span>
+          </label>
+          <div class="qyh-toast-blocker-level-actions">
+            <button id="${APP_ID}-select-all" class="menu_button" type="button">全部选择</button>
+            <button id="${APP_ID}-select-none" class="menu_button" type="button">全部取消</button>
+          </div>
+        </fieldset>
         <div class="qyh-toast-blocker-row">
           <div>
             <strong>控制台记录</strong>
@@ -184,6 +231,21 @@ class ToastBlockerHost {
         wrapper.querySelector(`#${APP_ID}-logging`)?.addEventListener('change', event => {
             void this.setLogging(event.currentTarget.checked).catch(() => { });
         });
+        wrapper.querySelectorAll('[data-toast-level]').forEach(input => {
+            input.addEventListener('change', event => {
+                const target = event.currentTarget;
+                const level = target.dataset.toastLevel;
+                if (!TOAST_METHODS.includes(level))
+                    return;
+                void this.setLevel(level, target.checked).catch(() => { });
+            });
+        });
+        wrapper.querySelector(`#${APP_ID}-select-all`)?.addEventListener('click', () => {
+            void this.setAllLevels(true).catch(() => { });
+        });
+        wrapper.querySelector(`#${APP_ID}-select-none`)?.addEventListener('click', () => {
+            void this.setAllLevels(false).catch(() => { });
+        });
         wrapper.querySelector(`#${APP_ID}-repair`)?.addEventListener('click', () => {
             void this.applyPreference({ forceSave: true }).then(() => {
                 this.statusText = '早期规则已校验并保存';
@@ -204,6 +266,10 @@ class ToastBlockerHost {
             enabled.checked = this.settings.enabled;
         if (logging)
             logging.checked = this.settings.logSuppressed;
+        this.panel.querySelectorAll('[data-toast-level]').forEach(input => {
+            const level = input.dataset.toastLevel;
+            input.checked = this.settings.blockedLevels[level];
+        });
         const runtime = this.runtime.getStatus();
         const earlyRule = hasManagedCss(power_user.custom_css);
         const status = this.panel.querySelector(`#${APP_ID}-status`);
@@ -218,15 +284,20 @@ class ToastBlockerHost {
             status.textContent = '状态：已关闭；原生 Toast 可正常显示';
             return;
         }
+        const blocked = getBlockedMethods(this.settings.blockedLevels);
+        if (blocked.length === 0) {
+            status.textContent = '状态：已启用，但未选择任何屏蔽类型';
+            return;
+        }
         const restart = earlyRule && !this.preloadPresentAtBoot ? ' · 建议重启一次' : '';
-        status.textContent = `状态：屏蔽中 · 守卫 ${runtime.guardedMethods}/4 · 本次拦截 ${this.suppressedCount}${restart}`;
+        status.textContent = `状态：屏蔽 ${blocked.join(' / ')} · 守卫 ${runtime.guardedMethods}/${blocked.length} · 本次拦截 ${this.suppressedCount}${restart}`;
     }
     getPublicStatus() {
         return {
             ...this.runtime.getStatus(),
             earlyRuleInstalled: hasManagedCss(power_user.custom_css),
             suppressedThisSession: this.suppressedCount,
-            settings: { ...this.settings },
+            settings: { ...this.settings, blockedLevels: { ...this.settings.blockedLevels } },
         };
     }
 }
@@ -240,6 +311,7 @@ export function installToastBlockerHost() {
         enable: () => host.setEnabled(true),
         disable: () => host.setEnabled(false),
         repair: () => host.applyPreference({ forceSave: true }),
+        setLevel: (level, blocked) => host.setLevel(level, blocked),
         status: () => host.getPublicStatus(),
     });
     void host.activate();

@@ -2,17 +2,17 @@ export const SETTINGS_KEY = 'qyh_toast_blocker';
 export const BLOCK_START = '/* SillyTavern Toast Blocker: managed start */';
 export const BLOCK_END = '/* SillyTavern Toast Blocker: managed end */';
 export const TOAST_METHODS = Object.freeze(['success', 'info', 'warning', 'error']);
-export const MANAGED_RULES = `${BLOCK_START}
-#toast-container {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-${BLOCK_END}`;
+export const DEFAULT_BLOCKED_LEVELS = Object.freeze({
+    success: true,
+    info: true,
+    warning: true,
+    error: true,
+});
 const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
+    blockedLevels: DEFAULT_BLOCKED_LEVELS,
     logSuppressed: false,
-    schemaVersion: 1,
+    schemaVersion: 2,
 });
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -22,11 +22,38 @@ export function normalizeSettings(value) {
     const candidate = value && typeof value === 'object' && !Array.isArray(value)
         ? value
         : {};
+    const levels = candidate.blockedLevels && typeof candidate.blockedLevels === 'object'
+        ? candidate.blockedLevels
+        : {};
     return {
         enabled: candidate.enabled === undefined ? DEFAULT_SETTINGS.enabled : Boolean(candidate.enabled),
+        blockedLevels: {
+            success: levels.success === undefined ? true : Boolean(levels.success),
+            info: levels.info === undefined ? true : Boolean(levels.info),
+            warning: levels.warning === undefined ? true : Boolean(levels.warning),
+            error: levels.error === undefined ? true : Boolean(levels.error),
+        },
         logSuppressed: Boolean(candidate.logSuppressed),
         schemaVersion: DEFAULT_SETTINGS.schemaVersion,
     };
+}
+export function getBlockedMethods(levels) {
+    return TOAST_METHODS.filter(level => levels[level]);
+}
+export function buildManagedRules(levels) {
+    const blocked = getBlockedMethods(levels);
+    if (blocked.length === 0)
+        return '';
+    const selectors = blocked.length === TOAST_METHODS.length
+        ? '#toast-container'
+        : blocked.map(level => `#toast-container > .toast-${level}`).join(',\n');
+    return `${BLOCK_START}
+${selectors} {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+${BLOCK_END}`;
 }
 export function hasManagedCss(css) {
     const text = typeof css === 'string' ? css : '';
@@ -37,15 +64,16 @@ export function hasManagedCss(css) {
 export function stripManagedCss(css) {
     return (typeof css === 'string' ? css : '').replace(BLOCK_PATTERN, '');
 }
-export function updateManagedCss(css, enabled) {
+export function updateManagedCss(css, enabled, levels = { ...DEFAULT_BLOCKED_LEVELS }) {
     const clean = stripManagedCss(css);
-    return enabled ? `${clean}\n${MANAGED_RULES}\n` : clean;
+    const rules = enabled ? buildManagedRules(levels) : '';
+    return rules ? `${clean}\n${rules}\n` : clean;
 }
-export function guardToastrMethods(target, { onSuppressed = () => { }, createResult = () => undefined } = {}) {
+export function guardToastrMethods(target, { methods = TOAST_METHODS, onSuppressed = () => { }, createResult = () => undefined, } = {}) {
     if (!target || typeof target !== 'object')
         return null;
     const records = [];
-    for (const method of TOAST_METHODS) {
+    for (const method of new Set(methods)) {
         const descriptor = Object.getOwnPropertyDescriptor(target, method);
         if (descriptor && descriptor.configurable === false)
             continue;

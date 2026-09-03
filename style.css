@@ -18,6 +18,71 @@
   line-height: 1.45;
 }
 
+#qyh-toast-blocker-panel .qyh-toast-blocker-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent);
+  border-radius: 0.55rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-levels legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 14%, transparent);
+  border-left: 0.25rem solid var(--qyh-toast-level-color);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--qyh-toast-level-color) 8%, transparent);
+  cursor: pointer;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level small {
+  color: var(--grey70, #aaa);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level--success {
+  --qyh-toast-level-color: #51a351;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level--info {
+  --qyh-toast-level-color: #2f96b4;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level--warning {
+  --qyh-toast-level-color: #f89406;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level--error {
+  --qyh-toast-level-color: #bd362f;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 0.5rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level-actions .menu_button {
+  flex: 1;
+  min-width: 0;
+}
+
 #qyh-toast-blocker-panel .qyh-toast-blocker-status {
   margin: 0.75rem 0;
   padding: 0.6rem 0.75rem;
@@ -36,4 +101,14 @@
 #qyh-toast-blocker-panel .qyh-toast-blocker-actions .menu_button {
   width: auto;
   min-width: 8rem;
+}
+
+@media (max-width: 520px) {
+  #qyh-toast-blocker-panel .qyh-toast-blocker-levels {
+    grid-template-columns: 1fr;
+  }
+
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level-actions {
+    grid-column: 1;
+  }
 }

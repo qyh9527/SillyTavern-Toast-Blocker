@@ -1,4 +1,13 @@
-import { MANAGED_RULES, guardToastrMethods, type SuppressedToast, type ToastrGuard } from './core.js';
+import {
+  DEFAULT_BLOCKED_LEVELS,
+  buildManagedRules,
+  getBlockedMethods,
+  guardToastrMethods,
+  type BlockedToastLevels,
+  type SuppressedToast,
+  type ToastLevel,
+  type ToastrGuard,
+} from './core.js';
 
 const RUNTIME_STYLE_ID = 'qyh-toast-blocker-runtime-style';
 
@@ -9,6 +18,7 @@ interface RuntimeCallbacks {
 
 export interface RuntimeStatus {
   enabled: boolean;
+  blockedMethods: ToastLevel[];
   guardedMethods: number;
   observingDom: boolean;
   runtimeStyle: boolean;
@@ -16,6 +26,7 @@ export interface RuntimeStatus {
 
 export class ToastRuntimeBlocker {
   enabled = false;
+  blockedLevels: BlockedToastLevels = { ...DEFAULT_BLOCKED_LEVELS };
   onSuppressed: (toast: SuppressedToast) => void;
   onStateChanged: () => void;
   guard: ToastrGuard | null = null;
@@ -34,20 +45,32 @@ export class ToastRuntimeBlocker {
   }
 
   setEnabled(enabled: boolean): void {
+    this.configure(Boolean(enabled), this.blockedLevels);
+  }
+
+  setBlockedLevels(levels: BlockedToastLevels): void {
+    this.configure(this.enabled, levels);
+  }
+
+  configure(enabled: boolean, levels: BlockedToastLevels): void {
+    this.stopWatchdog();
+    this.stopObserver();
+    this.restoreGuard();
+    document.getElementById(RUNTIME_STYLE_ID)?.remove();
     this.enabled = Boolean(enabled);
-    if (this.enabled) {
+    this.blockedLevels = { ...levels };
+    if (this.isEffective()) {
       this.ensureRuntimeStyle();
       this.patchCurrentToastr();
       this.startObserver();
-      this.removeExistingContainers();
+      this.removeBlockedToasts();
       this.startWatchdog();
-    } else {
-      this.stopWatchdog();
-      this.stopObserver();
-      this.restoreGuard();
-      document.getElementById(RUNTIME_STYLE_ID)?.remove();
     }
     this.onStateChanged();
+  }
+
+  isEffective(): boolean {
+    return this.enabled && getBlockedMethods(this.blockedLevels).length > 0;
   }
 
   ensureRuntimeStyle(): void {
@@ -57,7 +80,8 @@ export class ToastRuntimeBlocker {
       style.id = RUNTIME_STYLE_ID;
       document.head.append(style);
     }
-    if (style.textContent !== MANAGED_RULES) style.textContent = MANAGED_RULES;
+    const rules = buildManagedRules(this.blockedLevels);
+    if (style.textContent !== rules) style.textContent = rules;
   }
 
   patchCurrentToastr(): void {
@@ -66,6 +90,7 @@ export class ToastRuntimeBlocker {
     this.restoreGuard();
     this.guardedTarget = target;
     this.guard = guardToastrMethods(target, {
+      methods: getBlockedMethods(this.blockedLevels),
       onSuppressed: data => this.onSuppressed(data),
       createResult: () => globalThis.jQuery?.() ?? undefined,
     });
@@ -78,13 +103,15 @@ export class ToastRuntimeBlocker {
     this.guardedTarget = null;
   }
 
-  removeExistingContainers(): void {
-    document.querySelectorAll('#toast-container').forEach(element => element.remove());
+  removeBlockedToasts(): void {
+    for (const level of getBlockedMethods(this.blockedLevels)) {
+      document.querySelectorAll(`#toast-container > .toast-${level}`).forEach(element => element.remove());
+    }
   }
 
   startObserver(): void {
     if (this.observer || typeof MutationObserver !== 'function') return;
-    this.observer = new MutationObserver(() => this.removeExistingContainers());
+    this.observer = new MutationObserver(() => this.removeBlockedToasts());
     this.observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
@@ -96,10 +123,10 @@ export class ToastRuntimeBlocker {
   startWatchdog(): void {
     if (this.watchdog) return;
     this.watchdog = setInterval(() => {
-      if (!this.enabled) return;
+      if (!this.isEffective()) return;
       this.ensureRuntimeStyle();
       this.patchCurrentToastr();
-      this.removeExistingContainers();
+      this.removeBlockedToasts();
     }, 1000);
   }
 
@@ -111,6 +138,7 @@ export class ToastRuntimeBlocker {
   getStatus(): RuntimeStatus {
     return {
       enabled: this.enabled,
+      blockedMethods: getBlockedMethods(this.blockedLevels),
       guardedMethods: this.guard?.guardedCount ?? 0,
       observingDom: Boolean(this.observer),
       runtimeStyle: Boolean(document.getElementById(RUNTIME_STYLE_ID)),

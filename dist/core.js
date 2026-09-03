@@ -11,8 +11,10 @@ export const DEFAULT_BLOCKED_LEVELS = Object.freeze({
 const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
     blockedLevels: DEFAULT_BLOCKED_LEVELS,
+    redrawEnabled: false,
+    redrawMaxVisible: 6,
     logSuppressed: false,
-    schemaVersion: 2,
+    schemaVersion: 3,
 });
 function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -33,9 +35,15 @@ export function normalizeSettings(value) {
             warning: levels.warning === undefined ? true : Boolean(levels.warning),
             error: levels.error === undefined ? true : Boolean(levels.error),
         },
+        redrawEnabled: Boolean(candidate.redrawEnabled),
+        redrawMaxVisible: normalizeMaxVisible(candidate.redrawMaxVisible),
         logSuppressed: Boolean(candidate.logSuppressed),
         schemaVersion: DEFAULT_SETTINGS.schemaVersion,
     };
+}
+export function normalizeMaxVisible(value) {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) ? Math.min(20, Math.max(1, Math.round(parsed))) : 6;
 }
 export function getBlockedMethods(levels) {
     return TOAST_METHODS.filter(level => levels[level]);
@@ -69,7 +77,7 @@ export function updateManagedCss(css, enabled, levels = { ...DEFAULT_BLOCKED_LEV
     const rules = enabled ? buildManagedRules(levels) : '';
     return rules ? `${clean}\n${rules}\n` : clean;
 }
-export function guardToastrMethods(target, { methods = TOAST_METHODS, onSuppressed = () => { }, createResult = () => undefined, } = {}) {
+export function guardToastrMethods(target, { methods = TOAST_METHODS, handleCall, onSuppressed = () => { }, createResult = () => undefined, } = {}) {
     if (!target || typeof target !== 'object')
         return null;
     const records = [];
@@ -79,6 +87,16 @@ export function guardToastrMethods(target, { methods = TOAST_METHODS, onSuppress
             continue;
         let underlying = typeof target[method] === 'function' ? target[method] : undefined;
         const guarded = function (...args) {
+            if (handleCall) {
+                return handleCall({
+                    level: method,
+                    args,
+                    thisArg: this,
+                    invokeOriginal: () => typeof underlying === 'function'
+                        ? Reflect.apply(underlying, this, args)
+                        : undefined,
+                });
+            }
             onSuppressed({ level: method, args });
             return createResult(method, args);
         };

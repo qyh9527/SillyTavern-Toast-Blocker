@@ -8,8 +8,10 @@ export type BlockedToastLevels = Record<ToastLevel, boolean>;
 export interface ToastBlockerSettings {
   enabled: boolean;
   blockedLevels: BlockedToastLevels;
+  redrawEnabled: boolean;
+  redrawMaxVisible: number;
   logSuppressed: boolean;
-  schemaVersion: 2;
+  schemaVersion: 3;
 }
 
 export interface SuppressedToast {
@@ -27,8 +29,10 @@ export const DEFAULT_BLOCKED_LEVELS: Readonly<BlockedToastLevels> = Object.freez
 const DEFAULT_SETTINGS: Readonly<ToastBlockerSettings> = Object.freeze({
   enabled: true,
   blockedLevels: DEFAULT_BLOCKED_LEVELS as BlockedToastLevels,
+  redrawEnabled: false,
+  redrawMaxVisible: 6,
   logSuppressed: false,
-  schemaVersion: 2,
+  schemaVersion: 3,
 });
 
 function escapeRegExp(value: string): string {
@@ -55,9 +59,16 @@ export function normalizeSettings(value: unknown): ToastBlockerSettings {
       warning: levels.warning === undefined ? true : Boolean(levels.warning),
       error: levels.error === undefined ? true : Boolean(levels.error),
     },
+    redrawEnabled: Boolean(candidate.redrawEnabled),
+    redrawMaxVisible: normalizeMaxVisible(candidate.redrawMaxVisible),
     logSuppressed: Boolean(candidate.logSuppressed),
     schemaVersion: DEFAULT_SETTINGS.schemaVersion,
   };
+}
+
+export function normalizeMaxVisible(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.min(20, Math.max(1, Math.round(parsed))) : 6;
 }
 
 export function getBlockedMethods(levels: BlockedToastLevels): ToastLevel[] {
@@ -111,8 +122,14 @@ export interface ToastrGuard {
 
 interface GuardOptions {
   methods?: readonly ToastLevel[];
+  handleCall?: (invocation: ToastInvocation) => unknown;
   onSuppressed?: (toast: SuppressedToast) => void;
   createResult?: (level: ToastLevel, args: unknown[]) => unknown;
+}
+
+export interface ToastInvocation extends SuppressedToast {
+  thisArg: unknown;
+  invokeOriginal(): unknown;
 }
 
 interface GuardRecord {
@@ -125,6 +142,7 @@ export function guardToastrMethods(
   target: Record<string, unknown> | null | undefined,
   {
     methods = TOAST_METHODS,
+    handleCall,
     onSuppressed = () => {},
     createResult = () => undefined,
   }: GuardOptions = {},
@@ -137,7 +155,17 @@ export function guardToastrMethods(
     if (descriptor && descriptor.configurable === false) continue;
 
     let underlying: unknown = typeof target[method] === 'function' ? target[method] : undefined;
-    const guarded = function (...args: unknown[]) {
+    const guarded = function (this: unknown, ...args: unknown[]) {
+      if (handleCall) {
+        return handleCall({
+          level: method,
+          args,
+          thisArg: this,
+          invokeOriginal: () => typeof underlying === 'function'
+            ? Reflect.apply(underlying as (...values: unknown[]) => unknown, this, args)
+            : undefined,
+        });
+      }
       onSuppressed({ level: method, args });
       return createResult(method, args);
     };

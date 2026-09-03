@@ -6,6 +6,7 @@ import {
   TOAST_METHODS,
   getBlockedMethods,
   hasManagedCss,
+  normalizeMaxVisible,
   normalizeSettings,
   type ToastLevel,
   type ToastBlockerSettings,
@@ -18,6 +19,7 @@ const INSTANCE_KEY = Symbol.for('qyh9527.sillytavern.toastBlocker');
 
 interface PublicStatus extends Record<string, unknown> {
   enabled: boolean;
+  redrawEnabled: boolean;
   blockedMethods: ToastLevel[];
   guardedMethods: number;
   observingDom: boolean;
@@ -72,12 +74,22 @@ class ToastBlockerHost {
   }
 
   async disableFromLifecycle(): Promise<void> {
-    this.runtime.setEnabled(false);
+    this.runtime.configure({
+      blockerEnabled: false,
+      blockedLevels: this.settings.blockedLevels,
+      redrawEnabled: false,
+      redrawMaxVisible: this.settings.redrawMaxVisible,
+    });
     await this.persistPreloadCss(false, this.settings.blockedLevels, true);
   }
 
   async clean(): Promise<void> {
-    this.runtime.setEnabled(false);
+    this.runtime.configure({
+      blockerEnabled: false,
+      blockedLevels: this.settings.blockedLevels,
+      redrawEnabled: false,
+      redrawMaxVisible: this.settings.redrawMaxVisible,
+    });
     await this.persistPreloadCss(false, this.settings.blockedLevels, false);
     delete extension_settings[SETTINGS_KEY];
     await this.forceSave();
@@ -86,7 +98,7 @@ class ToastBlockerHost {
   }
 
   async applyPreference({ forceSave = false }: { forceSave?: boolean } = {}): Promise<void> {
-    this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+    this.applyRuntimeSettings();
     await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, forceSave);
     this.renderStatus();
   }
@@ -96,7 +108,7 @@ class ToastBlockerHost {
     extension_settings[SETTINGS_KEY] = this.settings;
     this.statusText = '正在保存…';
     this.renderStatus();
-    this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+    this.applyRuntimeSettings();
     await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
     this.preloadPresentAtBoot = false;
     this.statusText = this.settings.enabled
@@ -110,18 +122,18 @@ class ToastBlockerHost {
     extension_settings[SETTINGS_KEY] = this.settings;
     this.statusText = '正在保存类型设置…';
     this.renderStatus();
-    this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+    this.applyRuntimeSettings();
     await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
     this.preloadPresentAtBoot = false;
     const count = getBlockedMethods(this.settings.blockedLevels).length;
-    this.statusText = count > 0 ? `已保存：当前屏蔽 ${count} 类 Toast` : '已保存：当前不屏蔽任何类型';
+    this.statusText = count > 0 ? `已保存：已选择 ${count} 类 Toast` : '已保存：当前未选择任何类型';
     this.renderStatus();
   }
 
   async setAllLevels(blocked: boolean): Promise<void> {
     for (const level of TOAST_METHODS) this.settings.blockedLevels[level] = blocked;
     extension_settings[SETTINGS_KEY] = this.settings;
-    this.runtime.configure(this.settings.enabled, this.settings.blockedLevels);
+    this.applyRuntimeSettings();
     await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
     this.preloadPresentAtBoot = false;
     this.statusText = blocked ? '已选择全部四类 Toast' : '已取消全部类型';
@@ -133,6 +145,44 @@ class ToastBlockerHost {
     extension_settings[SETTINGS_KEY] = this.settings;
     await this.forceSave();
     this.renderStatus();
+  }
+
+  async setRedrawEnabled(enabled: boolean): Promise<void> {
+    this.settings.redrawEnabled = Boolean(enabled);
+    extension_settings[SETTINGS_KEY] = this.settings;
+    this.applyRuntimeSettings();
+    await this.forceSave();
+    this.statusText = this.settings.redrawEnabled
+      ? '高性能重绘器已启用；被屏蔽类型仍优先拦截'
+      : '高性能重绘器已关闭；未屏蔽类型恢复原生显示';
+    this.renderStatus();
+  }
+
+  async setRedrawMaxVisible(value: unknown): Promise<void> {
+    this.settings.redrawMaxVisible = normalizeMaxVisible(value);
+    extension_settings[SETTINGS_KEY] = this.settings;
+    this.applyRuntimeSettings();
+    await this.forceSave();
+    this.renderStatus();
+  }
+
+  async shutdown(): Promise<void> {
+    this.settings.enabled = false;
+    this.settings.redrawEnabled = false;
+    extension_settings[SETTINGS_KEY] = this.settings;
+    this.applyRuntimeSettings();
+    await this.persistPreloadCss(false, this.settings.blockedLevels, true);
+    this.statusText = '屏蔽器与重绘器均已关闭，早期规则已清理';
+    this.renderStatus();
+  }
+
+  applyRuntimeSettings(): void {
+    this.runtime.configure({
+      blockerEnabled: this.settings.enabled,
+      blockedLevels: this.settings.blockedLevels,
+      redrawEnabled: this.settings.redrawEnabled,
+      redrawMaxVisible: this.settings.redrawMaxVisible,
+    });
   }
 
   async persistPreloadCss(
@@ -202,7 +252,7 @@ class ToastBlockerHost {
     wrapper.className = 'inline-drawer';
     wrapper.innerHTML = `
       <div class="inline-drawer-toggle inline-drawer-header">
-        <b><i class="fa-solid fa-bell-slash"></i> Toast 全局屏蔽器</b>
+        <b><i class="fa-solid fa-bell-slash"></i> Toast 屏蔽与重绘器</b>
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
       </div>
       <div class="inline-drawer-content">
@@ -239,6 +289,23 @@ class ToastBlockerHost {
             <button id="${APP_ID}-select-none" class="menu_button" type="button">全部取消</button>
           </div>
         </fieldset>
+        <div class="qyh-toast-blocker-row qyh-toast-blocker-redraw-row">
+          <div>
+            <strong>高性能重绘器</strong>
+            <div class="qyh-toast-blocker-help">异步合批未屏蔽的 Toast；屏蔽规则始终优先。</div>
+          </div>
+          <label class="checkbox_label" title="启用异步轻量 Toast 重绘">
+            <input id="${APP_ID}-redraw" type="checkbox">
+            <span>启用</span>
+          </label>
+        </div>
+        <div class="qyh-toast-blocker-row qyh-toast-blocker-redraw-limit">
+          <div>
+            <strong>最大同时显示</strong>
+            <div class="qyh-toast-blocker-help">超出上限时清理最早的重绘 Toast，避免通知风暴拖慢移动端。</div>
+          </div>
+          <input id="${APP_ID}-redraw-limit" class="text_pole" type="number" min="1" max="20" step="1" inputmode="numeric" aria-label="重绘 Toast 最大同时显示数量">
+        </div>
         <div class="qyh-toast-blocker-row">
           <div>
             <strong>控制台记录</strong>
@@ -265,6 +332,12 @@ class ToastBlockerHost {
     wrapper.querySelector<HTMLInputElement>(`#${APP_ID}-logging`)?.addEventListener('change', event => {
       void this.setLogging((event.currentTarget as HTMLInputElement).checked).catch(() => {});
     });
+    wrapper.querySelector<HTMLInputElement>(`#${APP_ID}-redraw`)?.addEventListener('change', event => {
+      void this.setRedrawEnabled((event.currentTarget as HTMLInputElement).checked).catch(() => {});
+    });
+    wrapper.querySelector<HTMLInputElement>(`#${APP_ID}-redraw-limit`)?.addEventListener('change', event => {
+      void this.setRedrawMaxVisible((event.currentTarget as HTMLInputElement).value).catch(() => {});
+    });
     wrapper.querySelectorAll<HTMLInputElement>('[data-toast-level]').forEach(input => {
       input.addEventListener('change', event => {
         const target = event.currentTarget as HTMLInputElement;
@@ -286,7 +359,7 @@ class ToastBlockerHost {
       }).catch(() => {});
     });
     wrapper.querySelector(`#${APP_ID}-cleanup`)?.addEventListener('click', () => {
-      void this.setEnabled(false).catch(() => {});
+      void this.shutdown().catch(() => {});
     });
     this.renderStatus();
   }
@@ -295,8 +368,15 @@ class ToastBlockerHost {
     if (!this.panel?.isConnected) return;
     const enabled = this.panel.querySelector<HTMLInputElement>(`#${APP_ID}-enabled`);
     const logging = this.panel.querySelector<HTMLInputElement>(`#${APP_ID}-logging`);
+    const redraw = this.panel.querySelector<HTMLInputElement>(`#${APP_ID}-redraw`);
+    const redrawLimit = this.panel.querySelector<HTMLInputElement>(`#${APP_ID}-redraw-limit`);
     if (enabled) enabled.checked = this.settings.enabled;
     if (logging) logging.checked = this.settings.logSuppressed;
+    if (redraw) redraw.checked = this.settings.redrawEnabled;
+    if (redrawLimit) {
+      redrawLimit.value = String(this.settings.redrawMaxVisible);
+      redrawLimit.disabled = !this.settings.redrawEnabled;
+    }
     this.panel.querySelectorAll<HTMLInputElement>('[data-toast-level]').forEach(input => {
       const level = input.dataset.toastLevel as ToastLevel;
       input.checked = this.settings.blockedLevels[level];
@@ -311,17 +391,16 @@ class ToastBlockerHost {
       this.statusText = '';
       return;
     }
-    if (!this.settings.enabled) {
-      status.textContent = '状态：已关闭；原生 Toast 可正常显示';
-      return;
-    }
     const blocked = getBlockedMethods(this.settings.blockedLevels);
-    if (blocked.length === 0) {
-      status.textContent = '状态：已启用，但未选择任何屏蔽类型';
-      return;
-    }
+    const effectiveBlocked = this.settings.enabled ? blocked : [];
     const restart = earlyRule && !this.preloadPresentAtBoot ? ' · 建议重启一次' : '';
-    status.textContent = `状态：屏蔽 ${blocked.join(' / ')} · 守卫 ${runtime.guardedMethods}/${blocked.length} · 本次拦截 ${this.suppressedCount}${restart}`;
+    const blockerState = effectiveBlocked.length > 0
+      ? `屏蔽 ${effectiveBlocked.join(' / ')}`
+      : '屏蔽器关闭';
+    const redrawState = this.settings.redrawEnabled
+      ? `重绘器运行中 ${runtime.redraw.active}/${runtime.redraw.maxVisible} · 累计 ${runtime.redraw.rendered}`
+      : '重绘器关闭';
+    status.textContent = `状态：${blockerState} · ${redrawState} · 本次拦截 ${this.suppressedCount}${restart}`;
   }
 
   getPublicStatus(): PublicStatus {
@@ -343,6 +422,8 @@ export function installToastBlockerHost(): ToastBlockerHost {
     enable: () => host.setEnabled(true),
     disable: () => host.setEnabled(false),
     repair: () => host.applyPreference({ forceSave: true }),
+    redraw: (enabled: boolean) => host.setRedrawEnabled(enabled),
+    shutdown: () => host.shutdown(),
     setLevel: (level: ToastLevel, blocked: boolean) => host.setLevel(level, blocked),
     status: () => host.getPublicStatus(),
   });

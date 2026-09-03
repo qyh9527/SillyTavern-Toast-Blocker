@@ -83,6 +83,12 @@
   min-width: 0;
 }
 
+#qyh-toast-blocker-panel .qyh-toast-blocker-redraw-limit input {
+  width: 5.5rem;
+  min-width: 5.5rem;
+  text-align: center;
+}
+
 #qyh-toast-blocker-panel .qyh-toast-blocker-status {
   margin: 0.75rem 0;
   padding: 0.6rem 0.75rem;
@@ -110,5 +116,192 @@
 
   #qyh-toast-blocker-panel .qyh-toast-blocker-level-actions {
     grid-column: 1;
+  }
+}
+
+.qyh-toast-redraw-container {
+  position: fixed;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(92vw, 32rem);
+  max-height: 92dvh;
+  padding: 0.5rem;
+  overflow: hidden;
+  contain: layout paint style;
+  pointer-events: none;
+}
+
+.qyh-toast-redraw-container--targeted {
+  position: absolute;
+}
+
+.qyh-toast-redraw-container.toast-top-right {
+  top: env(safe-area-inset-top, 0);
+  right: env(safe-area-inset-right, 0);
+}
+
+.qyh-toast-redraw-container.toast-top-left {
+  top: env(safe-area-inset-top, 0);
+  left: env(safe-area-inset-left, 0);
+}
+
+.qyh-toast-redraw-container.toast-top-center {
+  top: env(safe-area-inset-top, 0);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.qyh-toast-redraw-container.toast-bottom-right {
+  right: env(safe-area-inset-right, 0);
+  bottom: env(safe-area-inset-bottom, 0);
+}
+
+.qyh-toast-redraw-container.toast-bottom-left {
+  bottom: env(safe-area-inset-bottom, 0);
+  left: env(safe-area-inset-left, 0);
+}
+
+.qyh-toast-redraw-container.toast-bottom-center {
+  bottom: env(safe-area-inset-bottom, 0);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.qyh-toast-redraw-container.toast-top-full-width,
+.qyh-toast-redraw-container.toast-bottom-full-width {
+  right: 0;
+  left: 0;
+  width: 100%;
+}
+
+.qyh-toast-redraw-container.toast-top-full-width {
+  top: env(safe-area-inset-top, 0);
+}
+
+.qyh-toast-redraw-container.toast-bottom-full-width {
+  bottom: env(safe-area-inset-bottom, 0);
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw {
+  --qyh-toast-accent: #2f96b4;
+  position: relative;
+  box-sizing: border-box;
+  width: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0.8rem 2.25rem 0.8rem 1rem !important;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--qyh-toast-accent) 45%, transparent);
+  border-left: 0.3rem solid var(--qyh-toast-accent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #20242b) 94%, black) !important;
+  background-image: none !important;
+  box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 28%);
+  color: var(--SmartThemeBodyColor, #f4f4f4) !important;
+  opacity: 1 !important;
+  contain: layout paint style;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw--success {
+  --qyh-toast-accent: #51a351;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw--info {
+  --qyh-toast-accent: #2f96b4;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw--warning {
+  --qyh-toast-accent: #f89406;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw--error {
+  --qyh-toast-accent: #bd362f;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw--entering {
+  animation: qyh-toast-redraw-enter var(--qyh-redraw-show-duration, 250ms) ease-out both;
+  will-change: transform, opacity;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw--leaving {
+  animation: qyh-toast-redraw-leave var(--qyh-redraw-hide-duration, 250ms) ease-in both;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.qyh-toast-redraw-container .toast-title {
+  margin-bottom: 0.15rem;
+  font-weight: 700;
+}
+
+.qyh-toast-redraw-container .toast-message {
+  line-height: 1.45;
+}
+
+.qyh-toast-redraw-container .toast-close-button {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.55rem;
+  padding: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.3rem;
+  line-height: 1;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 0.2rem;
+  background: var(--qyh-toast-accent);
+  opacity: 0.85;
+  transform: scaleX(1);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.qyh-toast-redraw-container .qyh-toast-redraw.rtl .qyh-toast-redraw-progress {
+  transform-origin: right center;
+}
+
+@keyframes qyh-toast-redraw-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -0.65rem, 0) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes qyh-toast-redraw-leave {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(0, -0.45rem, 0) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qyh-toast-redraw-container .qyh-toast-redraw--entering,
+  .qyh-toast-redraw-container .qyh-toast-redraw--leaving {
+    animation-duration: 1ms;
   }
 }

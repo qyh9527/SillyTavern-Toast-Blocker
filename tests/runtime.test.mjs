@@ -51,32 +51,76 @@ test('runtime blocker suppresses then restores toastr methods', () => {
   try {
     let count = 0;
     const blocker = new ToastRuntimeBlocker({ onSuppressed: () => { count += 1; } });
-    blocker.configure(true, { success: false, info: false, warning: false, error: true });
+    blocker.configure({
+      blockerEnabled: true,
+      blockedLevels: { success: false, info: false, warning: false, error: true },
+      redrawEnabled: false,
+      redrawMaxVisible: 6,
+    });
     assert.deepEqual(globalThis.toastr.error('hidden'), { length: 0 });
     assert.equal(globalThis.toastr.success('visible'), 'success:visible');
     assert.equal(count, 1);
     assert.deepEqual(blocker.getStatus(), {
       enabled: true,
+      redrawEnabled: false,
       blockedMethods: ['error'],
       guardedMethods: 1,
+      auxiliaryMethods: 0,
       observingDom: true,
       runtimeStyle: true,
+      redraw: {
+        enabled: false,
+        active: 0,
+        pending: 0,
+        rendered: 0,
+        evicted: 0,
+        fallbacks: 0,
+        maxVisible: 6,
+      },
     });
     assert.ok(queriedSelectors.includes('#toast-container > .toast-error'));
     assert.equal(queriedSelectors.includes('#toast-container > .toast-success'), false);
 
+    blocker.renderer.show = (level, args) => `redraw:${level}:${args[0]}`;
+    blocker.configure({
+      blockerEnabled: true,
+      blockedLevels: { success: false, info: false, warning: false, error: true },
+      redrawEnabled: true,
+      redrawMaxVisible: 4,
+    });
+    assert.deepEqual(globalThis.toastr.error('blocked wins'), { length: 0 });
+    assert.equal(globalThis.toastr.info('redrawn'), 'redraw:info:redrawn');
+    assert.equal(blocker.getStatus().guardedMethods, 4);
+    assert.equal(blocker.getStatus().auxiliaryMethods, 2);
+
     blocker.setEnabled(false);
-    assert.equal(globalThis.toastr.error('visible'), 'error:visible');
+    assert.equal(globalThis.toastr.error('redrawn after blocker closes'), 'redraw:error:redrawn after blocker closes');
     assert.equal(blocker.getStatus().runtimeStyle, false);
 
-    blocker.configure(true, { success: false, info: false, warning: false, error: false });
+    blocker.configure({
+      blockerEnabled: true,
+      blockedLevels: { success: false, info: false, warning: false, error: false },
+      redrawEnabled: false,
+      redrawMaxVisible: 6,
+    });
     assert.equal(globalThis.toastr.error('still visible'), 'error:still visible');
     assert.deepEqual(blocker.getStatus(), {
       enabled: true,
+      redrawEnabled: false,
       blockedMethods: [],
       guardedMethods: 0,
+      auxiliaryMethods: 0,
       observingDom: false,
       runtimeStyle: false,
+      redraw: {
+        enabled: false,
+        active: 0,
+        pending: 0,
+        rendered: 0,
+        evicted: 0,
+        fallbacks: 0,
+        maxVisible: 6,
+      },
     });
   } finally {
     globalThis.document = originalDocument;

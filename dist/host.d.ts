@@ -2,6 +2,7 @@ import { type ToastLevel, type ToastBlockerSettings } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
 interface PublicStatus extends Record<string, unknown> {
     enabled: boolean;
+    redrawEnabled: boolean;
     blockedMethods: ToastLevel[];
     guardedMethods: number;
     observingDom: boolean;
@@ -33,6 +34,10 @@ declare class ToastBlockerHost {
     setLevel(level: ToastLevel, blocked: boolean): Promise<void>;
     setAllLevels(blocked: boolean): Promise<void>;
     setLogging(enabled: boolean): Promise<void>;
+    setRedrawEnabled(enabled: boolean): Promise<void>;
+    setRedrawMaxVisible(value: unknown): Promise<void>;
+    shutdown(): Promise<void>;
+    applyRuntimeSettings(): void;
     persistPreloadCss(enabled: boolean, levels: ToastBlockerSettings['blockedLevels'], forceSave: boolean): Promise<boolean>;
     forceSave(): Promise<void>;
     mountPanelWhenReady(): Promise<void>;

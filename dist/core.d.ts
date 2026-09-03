@@ -7,8 +7,10 @@ export type BlockedToastLevels = Record<ToastLevel, boolean>;
 export interface ToastBlockerSettings {
     enabled: boolean;
     blockedLevels: BlockedToastLevels;
+    redrawEnabled: boolean;
+    redrawMaxVisible: number;
     logSuppressed: boolean;
-    schemaVersion: 2;
+    schemaVersion: 3;
 }
 export interface SuppressedToast {
     level: ToastLevel;
@@ -16,6 +18,7 @@ export interface SuppressedToast {
 }
 export declare const DEFAULT_BLOCKED_LEVELS: Readonly<BlockedToastLevels>;
 export declare function normalizeSettings(value: unknown): ToastBlockerSettings;
+export declare function normalizeMaxVisible(value: unknown): number;
 export declare function getBlockedMethods(levels: BlockedToastLevels): ToastLevel[];
 export declare function buildManagedRules(levels: BlockedToastLevels): string;
 export declare function hasManagedCss(css: unknown): boolean;
@@ -31,8 +34,13 @@ export interface ToastrGuard {
 }
 interface GuardOptions {
     methods?: readonly ToastLevel[];
+    handleCall?: (invocation: ToastInvocation) => unknown;
     onSuppressed?: (toast: SuppressedToast) => void;
     createResult?: (level: ToastLevel, args: unknown[]) => unknown;
 }
-export declare function guardToastrMethods(target: Record<string, unknown> | null | undefined, { methods, onSuppressed, createResult, }?: GuardOptions): ToastrGuard | null;
+export interface ToastInvocation extends SuppressedToast {
+    thisArg: unknown;
+    invokeOriginal(): unknown;
+}
+export declare function guardToastrMethods(target: Record<string, unknown> | null | undefined, { methods, handleCall, onSuppressed, createResult, }?: GuardOptions): ToastrGuard | null;
 export {};

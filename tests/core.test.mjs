@@ -5,6 +5,7 @@ import {
   BLOCK_START,
   guardToastrMethods,
   hasManagedCss,
+  normalizeMaxVisible,
   normalizeSettings,
   stripManagedCss,
   updateManagedCss,
@@ -15,14 +16,18 @@ test('settings default to enabled and normalize malformed values', () => {
   assert.deepEqual(normalizeSettings(undefined), {
     enabled: true,
     blockedLevels: allBlocked,
+    redrawEnabled: false,
+    redrawMaxVisible: 6,
     logSuppressed: false,
-    schemaVersion: 2,
+    schemaVersion: 3,
   });
   assert.deepEqual(normalizeSettings({ enabled: 0, logSuppressed: 1 }), {
     enabled: false,
     blockedLevels: allBlocked,
+    redrawEnabled: false,
+    redrawMaxVisible: 6,
     logSuppressed: true,
-    schemaVersion: 2,
+    schemaVersion: 3,
   });
   assert.deepEqual(normalizeSettings({ blockedLevels: { success: false, error: 0 } }).blockedLevels, {
     success: false,
@@ -30,6 +35,13 @@ test('settings default to enabled and normalize malformed values', () => {
     warning: true,
     error: false,
   });
+});
+
+test('redraw limits are clamped and malformed values migrate safely', () => {
+  assert.equal(normalizeMaxVisible('12'), 12);
+  assert.equal(normalizeMaxVisible(99), 20);
+  assert.equal(normalizeMaxVisible(0), 1);
+  assert.equal(normalizeMaxVisible('nope'), 6);
 });
 
 test('managed CSS round-trip preserves user CSS exactly', () => {
@@ -103,5 +115,17 @@ test('toastr guard leaves unselected methods completely native', () => {
   assert.equal(guard.guardedCount, 1);
   assert.equal(toastr.success('visible'), 'success:visible');
   assert.equal(toastr.error('blocked'), 'hidden');
+  guard.restore();
+});
+
+test('toastr guard can route calls while retaining the latest native fallback', () => {
+  const toastr = { success: message => `original:${message}` };
+  const guard = guardToastrMethods(toastr, {
+    methods: ['success'],
+    handleCall: ({ args, invokeOriginal }) => args[0] === 'native' ? invokeOriginal() : 'routed',
+  });
+  assert.equal(toastr.success('redraw'), 'routed');
+  toastr.success = message => `replacement:${message}`;
+  assert.equal(toastr.success('native'), 'replacement:native');
   guard.restore();
 });

@@ -1,4 +1,4 @@
-import { DEFAULT_BLOCKED_LEVELS, TOAST_METHODS, buildManagedRules, getBlockedMethods, guardToastrMethods, } from './core.js';
+import { DEFAULT_BLOCKED_LEVELS, REDRAW_READY_CLASS, TOAST_METHODS, buildManagedRules, getBlockedMethods, guardToastrMethods, } from './core.js';
 import { LightweightToastRenderer, guardToastrAuxiliaryMethods, } from './renderer.js';
 const RUNTIME_STYLE_ID = 'qyh-toast-blocker-runtime-style';
 export class ToastRuntimeBlocker {
@@ -61,8 +61,11 @@ export class ToastRuntimeBlocker {
         }
         if (this.isEffective()) {
             this.patchCurrentToastr();
+            if (this.redrawEnabled)
+                this.adoptExistingNativeToasts();
             this.startWatchdog();
         }
+        document.documentElement?.classList?.add(REDRAW_READY_CLASS);
         this.onStateChanged();
     }
     isEffective() {
@@ -112,6 +115,20 @@ export class ToastRuntimeBlocker {
         this.guard = null;
         this.guardedTarget = null;
     }
+    adoptExistingNativeToasts() {
+        const target = this.guardedTarget;
+        if (!this.redrawEnabled || !target)
+            return;
+        const elements = document.querySelectorAll('#toast-container > .toast');
+        this.renderer.adoptNativeToasts(elements, target.options, element => {
+            const remover = target.remove;
+            const handle = typeof globalThis.jQuery === 'function' ? globalThis.jQuery(element) : element;
+            if (typeof remover === 'function')
+                Reflect.apply(remover, target, [handle]);
+            else
+                element.remove();
+        });
+    }
     removeBlockedToasts() {
         for (const level of getBlockedMethods(this.blockedLevels)) {
             document.querySelectorAll(`#toast-container > .toast-${level}`).forEach(element => element.remove());
@@ -138,6 +155,8 @@ export class ToastRuntimeBlocker {
             this.patchCurrentToastr();
             if (this.isBlockerEffective())
                 this.removeBlockedToasts();
+            if (this.redrawEnabled)
+                this.adoptExistingNativeToasts();
         }, 1000);
     }
     stopWatchdog() {

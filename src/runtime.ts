@@ -1,5 +1,6 @@
 import {
   DEFAULT_BLOCKED_LEVELS,
+  REDRAW_READY_CLASS,
   TOAST_METHODS,
   buildManagedRules,
   getBlockedMethods,
@@ -106,8 +107,10 @@ export class ToastRuntimeBlocker {
     }
     if (this.isEffective()) {
       this.patchCurrentToastr();
+      if (this.redrawEnabled) this.adoptExistingNativeToasts();
       this.startWatchdog();
     }
+    document.documentElement?.classList?.add(REDRAW_READY_CLASS);
     this.onStateChanged();
   }
 
@@ -166,6 +169,18 @@ export class ToastRuntimeBlocker {
     this.guardedTarget = null;
   }
 
+  adoptExistingNativeToasts(): void {
+    const target = this.guardedTarget;
+    if (!this.redrawEnabled || !target) return;
+    const elements = document.querySelectorAll('#toast-container > .toast');
+    this.renderer.adoptNativeToasts(elements, target.options, element => {
+      const remover = target.remove;
+      const handle = typeof globalThis.jQuery === 'function' ? globalThis.jQuery(element) : element;
+      if (typeof remover === 'function') Reflect.apply(remover, target, [handle]);
+      else element.remove();
+    });
+  }
+
   removeBlockedToasts(): void {
     for (const level of getBlockedMethods(this.blockedLevels)) {
       document.querySelectorAll(`#toast-container > .toast-${level}`).forEach(element => element.remove());
@@ -190,6 +205,7 @@ export class ToastRuntimeBlocker {
       if (this.isBlockerEffective()) this.ensureRuntimeStyle();
       this.patchCurrentToastr();
       if (this.isBlockerEffective()) this.removeBlockedToasts();
+      if (this.redrawEnabled) this.adoptExistingNativeToasts();
     }, 1000);
   }
 

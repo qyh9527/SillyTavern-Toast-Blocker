@@ -1,7 +1,8 @@
-import { normalizeMaxVisible, type ToastLevel } from './core.js';
+import { TOAST_METHODS, normalizeMaxVisible, type ToastLevel } from './core.js';
 
 const CONTAINER_CLASS = 'qyh-toast-redraw-container';
 const TOAST_ATTRIBUTE = 'data-qyh-redraw-toast';
+const ADOPTED_ATTRIBUTE = 'data-qyh-adopted-toast';
 const MAX_PER_FRAME = 12;
 const MAX_PENDING = 100;
 
@@ -247,6 +248,59 @@ export class LightweightToastRenderer {
     return this.elementsFromHandle(handle).some(element => element.hasAttribute(TOAST_ATTRIBUTE));
   }
 
+  /**
+   * 接管在重绘器加载前已经由原生 Toastr 创建的节点。直接移动节点可保留其
+   * 链接、按钮和已绑定事件；随后补上统一外观与整卡点击关闭能力。
+   */
+  adoptNativeToasts(
+    elements: Iterable<Element>,
+    globalOptions: unknown,
+    dismiss: (element: HTMLElement) => void,
+  ): number {
+    if (!this.enabled) return 0;
+    const options = mergeOptions(globalOptions, {});
+    const target = this.resolveTarget(options.target);
+    if (!target) return 0;
+    const container = this.getContainer(target, options.positionClass);
+    const adopted: HTMLElement[] = [];
+    for (const candidate of elements) {
+      if (!isElement(candidate) || candidate.hasAttribute(ADOPTED_ATTRIBUTE)) continue;
+      const element = candidate as HTMLElement;
+      const level = TOAST_METHODS.find(type => (
+        element.classList.contains(`toast-${type}`)
+        || element.classList.contains(options.iconClasses[type])
+      )) ?? 'info';
+      element.setAttribute(ADOPTED_ATTRIBUTE, level);
+      element.classList.add('qyh-toast-redraw', `qyh-toast-redraw--${level}`, 'interactable');
+      element.classList.remove('toast-non-interactable');
+      element.setAttribute('title', '点击关闭');
+      element.setAttribute('role', level === 'error' || level === 'warning' ? 'alert' : 'status');
+      element.setAttribute('aria-atomic', 'true');
+      element.style.setProperty('--qyh-redraw-show-duration', `${options.showDuration}ms`);
+      element.style.setProperty('--qyh-redraw-hide-duration', `${options.hideDuration}ms`);
+      element.addEventListener('click', () => {
+        setTimeout(() => {
+          if (!element.isConnected) return;
+          try {
+            dismiss(element);
+          } catch (error) {
+            this.onError(error);
+            element.remove();
+          }
+        }, 0);
+      });
+      adopted.push(element);
+    }
+    if (adopted.length === 0) return 0;
+    const fragment = this.toFragment(adopted);
+    if (options.newestOnTop) container.prepend(fragment);
+    else container.append(fragment);
+    this.rendered += adopted.length;
+    this.onRendered();
+    this.onStateChanged();
+    return adopted.length;
+  }
+
   clear(handle: unknown, { force = false, immediate = false } = {}): boolean {
     const elements = this.elementsFromHandle(handle).filter(element => element.hasAttribute(TOAST_ATTRIBUTE));
     if (elements.length === 0) return false;
@@ -399,8 +453,9 @@ export class LightweightToastRenderer {
     const { map } = response;
     element.className = `${options.toastClass} qyh-toast-redraw qyh-toast-redraw--${map.type} ${map.iconClass}`;
     element.classList.toggle('rtl', Boolean(options.rtl));
-    element.classList.toggle('interactable', options.tapToDismiss !== false);
-    element.classList.toggle('toast-non-interactable', options.tapToDismiss === false);
+    element.classList.add('interactable');
+    element.classList.remove('toast-non-interactable');
+    element.setAttribute('title', '点击关闭');
     element.setAttribute('role', map.type === 'error' || map.type === 'warning' ? 'alert' : 'status');
     element.setAttribute('aria-atomic', 'true');
     element.style.setProperty('--qyh-redraw-show-duration', `${options.showDuration}ms`);
@@ -454,7 +509,7 @@ export class LightweightToastRenderer {
     element.classList.add('qyh-toast-redraw--entering');
     element.addEventListener('click', event => {
       if (options.onclick) safelyCall(options.onclick, this.onError, event);
-      if (options.onclick || options.tapToDismiss !== false) this.dismissElement(element, false, false, false);
+      this.dismissElement(element, true, false, false);
     });
     if (options.closeOnHover) {
       element.addEventListener('mouseenter', () => this.pause(state));

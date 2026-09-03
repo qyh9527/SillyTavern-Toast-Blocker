@@ -72,6 +72,24 @@ test('managed CSS targets only selected toast classes', () => {
   }), '');
 });
 
+test('redraw preload hides native startup toasts and includes an automatic safety release', () => {
+  const installed = updateManagedCss('', false, {
+    success: false,
+    info: false,
+    warning: false,
+    error: false,
+  }, true);
+  assert.match(installed, /html:not\(\.qyh-toast-redraw-ready\) #toast-container/);
+  assert.match(installed, /qyh-toast-redraw-startup-release/);
+  assert.match(installed, /8s forwards/);
+  assert.equal(updateManagedCss(installed, false, {
+    success: false,
+    info: false,
+    warning: false,
+    error: false,
+  }, false), '');
+});
+
 test('duplicate managed blocks are removed without touching surrounding rules', () => {
   const duplicate = `.a{}\n${BLOCK_START}\nold\n${BLOCK_END}\n.b{}\n${BLOCK_START}\nold2\n${BLOCK_END}\n.c{}`;
   const clean = stripManagedCss(duplicate);

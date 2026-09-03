@@ -42,7 +42,7 @@ declare class ToastBlockerHost {
     requestFrontendRefresh(button: HTMLButtonElement): Promise<void>;
     resetRefreshButton(): void;
     applyRuntimeSettings(): void;
-    persistPreloadCss(enabled: boolean, levels: ToastBlockerSettings['blockedLevels'], forceSave: boolean): Promise<boolean>;
+    persistPreloadCss(enabled: boolean, levels: ToastBlockerSettings['blockedLevels'], hideNativeUntilRedrawReady: boolean, forceSave: boolean): Promise<boolean>;
     forceSave(): Promise<void>;
     mountPanelWhenReady(): Promise<void>;
     renderStatus(): void;

@@ -5,6 +5,7 @@ import { ToastRuntimeBlocker } from '../dist/runtime.js';
 test('runtime blocker suppresses then restores toastr methods', () => {
   const nodes = new Map();
   const queriedSelectors = [];
+  const rootClasses = new Set();
   const originalDocument = globalThis.document;
   const originalMutationObserver = globalThis.MutationObserver;
   const originalToastr = globalThis.toastr;
@@ -16,7 +17,13 @@ test('runtime blocker suppresses then restores toastr methods', () => {
   }
 
   globalThis.document = {
-    documentElement: {},
+    documentElement: {
+      classList: {
+        add(name) {
+          rootClasses.add(name);
+        },
+      },
+    },
     head: {
       append(node) {
         nodes.set(node.id, node);
@@ -92,6 +99,8 @@ test('runtime blocker suppresses then restores toastr methods', () => {
     assert.equal(globalThis.toastr.info('redrawn'), 'redraw:info:redrawn');
     assert.equal(blocker.getStatus().guardedMethods, 4);
     assert.equal(blocker.getStatus().auxiliaryMethods, 2);
+    assert.equal(rootClasses.has('qyh-toast-redraw-ready'), true);
+    assert.ok(queriedSelectors.includes('#toast-container > .toast'));
 
     blocker.setEnabled(false);
     assert.equal(globalThis.toastr.error('redrawn after blocker closes'), 'redraw:error:redrawn after blocker closes');

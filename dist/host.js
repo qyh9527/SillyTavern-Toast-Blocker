@@ -64,7 +64,7 @@ class ToastBlockerHost {
             redrawEnabled: false,
             redrawMaxVisible: this.settings.redrawMaxVisible,
         });
-        await this.persistPreloadCss(false, this.settings.blockedLevels, true);
+        await this.persistPreloadCss(false, this.settings.blockedLevels, false, true);
     }
     async clean() {
         this.refreshConfirmation.cancel();
@@ -74,7 +74,7 @@ class ToastBlockerHost {
             redrawEnabled: false,
             redrawMaxVisible: this.settings.redrawMaxVisible,
         });
-        await this.persistPreloadCss(false, this.settings.blockedLevels, false);
+        await this.persistPreloadCss(false, this.settings.blockedLevels, false, false);
         delete extension_settings[SETTINGS_KEY];
         await this.forceSave();
         this.panel?.remove();
@@ -82,7 +82,7 @@ class ToastBlockerHost {
     }
     async applyPreference({ forceSave = false } = {}) {
         this.applyRuntimeSettings();
-        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, forceSave);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, this.settings.redrawEnabled, forceSave);
         this.renderStatus();
     }
     async setEnabled(enabled) {
@@ -91,11 +91,13 @@ class ToastBlockerHost {
         this.statusText = '正在保存…';
         this.renderStatus();
         this.applyRuntimeSettings();
-        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, this.settings.redrawEnabled, true);
         this.preloadPresentAtBoot = false;
         this.statusText = this.settings.enabled
             ? '已启用；已保存所选类型，重启后可覆盖启动阶段'
-            : '已关闭并移除早期规则';
+            : this.settings.redrawEnabled
+                ? '屏蔽器已关闭；已保留重绘器的启动接管规则'
+                : '已关闭并移除早期规则';
         this.renderStatus();
     }
     async setLevel(level, blocked) {
@@ -104,7 +106,7 @@ class ToastBlockerHost {
         this.statusText = '正在保存类型设置…';
         this.renderStatus();
         this.applyRuntimeSettings();
-        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, this.settings.redrawEnabled, true);
         this.preloadPresentAtBoot = false;
         const count = getBlockedMethods(this.settings.blockedLevels).length;
         this.statusText = count > 0 ? `已保存：已选择 ${count} 类 Toast` : '已保存：当前未选择任何类型';
@@ -115,7 +117,7 @@ class ToastBlockerHost {
             this.settings.blockedLevels[level] = blocked;
         extension_settings[SETTINGS_KEY] = this.settings;
         this.applyRuntimeSettings();
-        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, true);
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, this.settings.redrawEnabled, true);
         this.preloadPresentAtBoot = false;
         this.statusText = blocked ? '已选择全部四类 Toast' : '已取消全部类型';
         this.renderStatus();
@@ -130,7 +132,8 @@ class ToastBlockerHost {
         this.settings.redrawEnabled = Boolean(enabled);
         extension_settings[SETTINGS_KEY] = this.settings;
         this.applyRuntimeSettings();
-        await this.forceSave();
+        await this.persistPreloadCss(this.settings.enabled, this.settings.blockedLevels, this.settings.redrawEnabled, true);
+        this.preloadPresentAtBoot = false;
         this.statusText = this.settings.redrawEnabled
             ? '高性能重绘器已启用；被屏蔽类型仍优先拦截'
             : '高性能重绘器已关闭；未屏蔽类型恢复原生显示';
@@ -148,7 +151,7 @@ class ToastBlockerHost {
         this.settings.redrawEnabled = false;
         extension_settings[SETTINGS_KEY] = this.settings;
         this.applyRuntimeSettings();
-        await this.persistPreloadCss(false, this.settings.blockedLevels, true);
+        await this.persistPreloadCss(false, this.settings.blockedLevels, false, true);
         this.statusText = '屏蔽器与重绘器均已关闭，早期规则已清理';
         this.renderStatus();
     }
@@ -192,9 +195,9 @@ class ToastBlockerHost {
             redrawMaxVisible: this.settings.redrawMaxVisible,
         });
     }
-    async persistPreloadCss(enabled, levels, forceSave) {
+    async persistPreloadCss(enabled, levels, hideNativeUntilRedrawReady, forceSave) {
         const before = typeof power_user.custom_css === 'string' ? power_user.custom_css : '';
-        const after = updateManagedCss(before, enabled, levels);
+        const after = updateManagedCss(before, enabled, levels, hideNativeUntilRedrawReady);
         if (before === after) {
             if (forceSave)
                 await this.forceSave();

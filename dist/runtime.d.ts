@@ -43,6 +43,7 @@ export declare class ToastRuntimeBlocker {
     ensureRuntimeStyle(): void;
     patchCurrentToastr(): void;
     restoreGuard(): void;
+    adoptExistingNativeToasts(): void;
     removeBlockedToasts(): void;
     startObserver(): void;
     stopObserver(): void;

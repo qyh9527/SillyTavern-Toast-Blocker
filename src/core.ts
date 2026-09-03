@@ -1,6 +1,7 @@
 export const SETTINGS_KEY = 'qyh_toast_blocker';
 export const BLOCK_START = '/* SillyTavern Toast Blocker: managed start */';
 export const BLOCK_END = '/* SillyTavern Toast Blocker: managed end */';
+export const REDRAW_READY_CLASS = 'qyh-toast-redraw-ready';
 export const TOAST_METHODS = Object.freeze(['success', 'info', 'warning', 'error'] as const);
 export type ToastLevel = (typeof TOAST_METHODS)[number];
 export type BlockedToastLevels = Record<ToastLevel, boolean>;
@@ -75,19 +76,36 @@ export function getBlockedMethods(levels: BlockedToastLevels): ToastLevel[] {
   return TOAST_METHODS.filter(level => levels[level]);
 }
 
-export function buildManagedRules(levels: BlockedToastLevels): string {
+export function buildManagedRules(levels: BlockedToastLevels, hideNativeUntilRedrawReady = false): string {
   const blocked = getBlockedMethods(levels);
-  if (blocked.length === 0) return '';
-  const selectors = blocked.length === TOAST_METHODS.length
-    ? '#toast-container'
-    : blocked.map(level => `#toast-container > .toast-${level}`).join(',\n');
-  return `${BLOCK_START}
-${selectors} {
+  if (blocked.length === 0 && !hideNativeUntilRedrawReady) return '';
+  const sections: string[] = [];
+  if (blocked.length > 0) {
+    const selectors = blocked.length === TOAST_METHODS.length
+      ? '#toast-container'
+      : blocked.map(level => `#toast-container > .toast-${level}`).join(',\n');
+    sections.push(`${selectors} {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}`);
+  }
+  if (hideNativeUntilRedrawReady) {
+    sections.push(`html:not(.${REDRAW_READY_CLASS}) #toast-container {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  animation: qyh-toast-redraw-startup-release 1ms step-end 8s forwards;
 }
-${BLOCK_END}`;
+@keyframes qyh-toast-redraw-startup-release {
+  to {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+}`);
+  }
+  return `${BLOCK_START}\n${sections.join('\n')}\n${BLOCK_END}`;
 }
 
 export function hasManagedCss(css: unknown): boolean {
@@ -105,9 +123,13 @@ export function updateManagedCss(
   css: unknown,
   enabled: boolean,
   levels: BlockedToastLevels = { ...DEFAULT_BLOCKED_LEVELS },
+  hideNativeUntilRedrawReady = false,
 ): string {
   const clean = stripManagedCss(css);
-  const rules = enabled ? buildManagedRules(levels) : '';
+  const effectiveLevels = enabled
+    ? levels
+    : { success: false, info: false, warning: false, error: false };
+  const rules = buildManagedRules(effectiveLevels, hideNativeUntilRedrawReady);
   return rules ? `${clean}\n${rules}\n` : clean;
 }
 

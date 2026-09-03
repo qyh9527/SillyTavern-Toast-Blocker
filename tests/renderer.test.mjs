@@ -11,6 +11,10 @@ class FakeClassList {
     for (const name of names) this.element.classes.add(name);
   }
 
+  remove(...names) {
+    for (const name of names) this.element.classes.delete(name);
+  }
+
   contains(name) {
     return this.element.classes.has(name);
   }
@@ -93,6 +97,10 @@ class FakeElement {
     const expanded = nodes.flatMap(node => node?.nodeType === 11 ? node.children : [node]);
     for (const node of expanded) {
       if (!node) continue;
+      if (node.parentElement) {
+        const oldIndex = node.parentElement.children.indexOf(node);
+        if (oldIndex >= 0) node.parentElement.children.splice(oldIndex, 1);
+      }
       node.parentElement = this;
       node.setConnected(this.isConnected);
     }
@@ -237,6 +245,65 @@ test('redraw renderer caps each animation frame to twelve DOM creations', async 
     browser.frames.shift()(32);
     assert.equal(renderer.getStats().active, 13);
     assert.equal(renderer.getStats().pending, 0);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('redraw cards remain click-dismissible when native tapToDismiss is false', async () => {
+  const browser = installFakeBrowser();
+  try {
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6);
+    const handle = renderer.show('info', ['message', '', {
+      tapToDismiss: false,
+      timeOut: 0,
+      hideDuration: 0,
+    }], () => undefined, {});
+    await Promise.resolve();
+    browser.frames.shift()(16);
+
+    const element = handle[0];
+    assert.equal(element.classList.contains('interactable'), true);
+    assert.equal(element.classList.contains('toast-non-interactable'), false);
+    globalThis.document.activeElement = element;
+    element.events.get('click')[0]({});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(renderer.getStats().active, 0);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
+test('startup native toasts are moved intact into the redraw container and gain card dismissal', async () => {
+  const browser = installFakeBrowser();
+  try {
+    const nativeContainer = new FakeElement('div');
+    const nativeToast = new FakeElement('div');
+    const originalLink = new FakeElement('a');
+    nativeToast.className = 'toast toast-info toast-non-interactable';
+    nativeToast.append(originalLink);
+    nativeContainer.append(nativeToast);
+    browser.body.append(nativeContainer);
+
+    let dismissed = 0;
+    const renderer = new LightweightToastRenderer();
+    renderer.configure(true, 6);
+    const count = renderer.adoptNativeToasts([nativeToast], {}, element => {
+      dismissed += 1;
+      element.remove();
+    });
+
+    assert.equal(count, 1);
+    assert.equal(nativeToast.parentElement.classList.contains('qyh-toast-redraw-container'), true);
+    assert.equal(nativeToast.children[0], originalLink);
+    assert.equal(nativeToast.classList.contains('qyh-toast-redraw'), true);
+    assert.equal(nativeToast.classList.contains('interactable'), true);
+    nativeToast.events.get('click')[0]({});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(dismissed, 1);
     renderer.stop();
   } finally {
     browser.restore();

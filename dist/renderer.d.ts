@@ -32,6 +32,11 @@ export declare class LightweightToastRenderer {
     configure(enabled: boolean, maxVisible: number): void;
     show(level: ToastLevel, args: unknown[], fallback: () => unknown, globalOptions: unknown): unknown;
     ownsHandle(handle: unknown): boolean;
+    /**
+     * 接管在重绘器加载前已经由原生 Toastr 创建的节点。直接移动节点可保留其
+     * 链接、按钮和已绑定事件；随后补上统一外观与整卡点击关闭能力。
+     */
+    adoptNativeToasts(elements: Iterable<Element>, globalOptions: unknown, dismiss: (element: HTMLElement) => void): number;
     clear(handle: unknown, { force, immediate }?: {
         force?: boolean | undefined;
         immediate?: boolean | undefined;

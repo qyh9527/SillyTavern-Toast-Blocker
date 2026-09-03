@@ -38,18 +38,82 @@
   align-items: center;
   gap: 0.55rem;
   min-width: 0;
+  min-height: 3.5rem;
+  box-sizing: border-box;
   padding: 0.55rem 0.6rem;
   border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 14%, transparent);
   border-left: 0.25rem solid var(--qyh-toast-level-color);
   border-radius: 0.45rem;
   background: color-mix(in srgb, var(--qyh-toast-level-color) 8%, transparent);
   cursor: pointer;
+  touch-action: manipulation;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level:hover {
+  border-color: color-mix(in srgb, var(--qyh-toast-level-color) 65%, transparent);
+  background: color-mix(in srgb, var(--qyh-toast-level-color) 13%, transparent);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level:has(input:checked) {
+  border-color: color-mix(in srgb, var(--qyh-toast-level-color) 82%, white 8%);
+  background: color-mix(in srgb, var(--qyh-toast-level-color) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qyh-toast-level-color) 35%, transparent),
+    0 0.2rem 0.55rem rgb(0 0 0 / 14%);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--qyh-toast-level-color) 85%, white 10%);
+  outline-offset: 2px;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"] {
+  display: grid;
+  flex: 0 0 1.3rem;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin: 0;
+  appearance: none;
+  border: 2px solid color-mix(in srgb, var(--qyh-toast-level-color) 75%, var(--SmartThemeBodyColor));
+  border-radius: 0.38rem;
+  background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #20242b) 84%, transparent);
+  cursor: pointer;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"]::after {
+  content: "✓";
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(0.55);
+  transition: opacity 100ms ease, transform 100ms ease;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"]:checked {
+  border-color: var(--qyh-toast-level-color);
+  background: var(--qyh-toast-level-color);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"]:checked::after {
+  opacity: 1;
+  transform: scale(1);
 }
 
 #qyh-toast-blocker-panel .qyh-toast-blocker-level span {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  line-height: 1.2;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-blocker-level strong,
+#qyh-toast-blocker-panel .qyh-toast-blocker-level small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #qyh-toast-blocker-panel .qyh-toast-blocker-level small {
@@ -141,11 +205,42 @@
 
 @media (max-width: 520px) {
   #qyh-toast-blocker-panel .qyh-toast-blocker-levels {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    padding: 0.55rem;
+  }
+
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level {
+    gap: 0.4rem;
+    min-height: 3.25rem;
+    padding: 0.45rem 0.5rem;
+    border-left-width: 0.2rem;
+  }
+
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"] {
+    flex-basis: 1.2rem;
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level strong {
+    font-size: 0.88rem;
+  }
+
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level small {
+    font-size: 0.74rem;
   }
 
   #qyh-toast-blocker-panel .qyh-toast-blocker-level-actions {
-    grid-column: 1;
+    grid-column: 1 / -1;
+    gap: 0.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level,
+  #qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"]::after {
+    transition-duration: 1ms;
   }
 }
 

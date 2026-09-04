@@ -21,6 +21,8 @@ declare class ToastBlockerHost {
     bootPromise: Promise<void> | null;
     runtime: ToastRuntimeBlocker;
     refreshConfirmation: TimedConfirmation;
+    statusRenderScheduled: boolean;
+    statusRenderTimer: ReturnType<typeof setTimeout> | null;
     constructor();
     activate({ forceSave }?: {
         forceSave?: boolean;
@@ -49,6 +51,9 @@ declare class ToastBlockerHost {
     forceSave(): Promise<void>;
     mountPanelWhenReady(): Promise<void>;
     renderStatus(): void;
+    /** 抽屉合上时跳过诊断数字刷新，只保留轻量的状态行与开关回显。 */
+    private isDiagnosticsVisible;
+    private paintStatusNow;
     getPublicStatus(): PublicStatus;
 }
 export declare function installToastBlockerHost(): ToastBlockerHost;

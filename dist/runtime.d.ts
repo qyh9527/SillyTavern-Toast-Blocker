@@ -37,6 +37,10 @@ export declare class ToastRuntimeBlocker {
     guardedTarget: Record<string, unknown> | null;
     observer: MutationObserver | null;
     watchdog: ReturnType<typeof setInterval> | null;
+    watchdogFastTicks: number;
+    watchdogSlow: boolean;
+    watchdogBootWindow: boolean;
+    visibilityHandler: (() => void) | null;
     renderer: LightweightToastRenderer;
     constructor({ onSuppressed, onRedrawn, onStateChanged }?: RuntimeCallbacks);
     setEnabled(enabled: boolean): void;
@@ -49,9 +53,15 @@ export declare class ToastRuntimeBlocker {
     restoreGuard(): void;
     adoptExistingNativeToasts(): void;
     removeBlockedToasts(): void;
+    /** 看门狗是否处于整窗监听（启动等待容器阶段）。 */
+    get bootObserving(): boolean;
     startObserver(): void;
     stopObserver(): void;
     startWatchdog(): void;
+    runWatchdogTick(): void;
+    /** 启动等待期内若容器已出现，把整窗监听收敛为容器定向监听。 */
+    private retargetObserverToContainer;
+    private stopWatchdogTimer;
     stopWatchdog(): void;
     resetDiagnostics(): void;
     getStatus(): RuntimeStatus;

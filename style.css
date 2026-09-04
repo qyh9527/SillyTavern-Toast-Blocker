@@ -8,6 +8,8 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.65rem 0;
+  /* color-mix 回退：先给旧 WebView 一个透明近似色，再渐进增强。 */
+  border-bottom: 1px solid rgb(128 128 128 / 15%);
   border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 15%, transparent);
 }
 
@@ -40,8 +42,10 @@
   padding: 0 !important;
   appearance: none !important;
   -webkit-appearance: none !important;
+  border: 1px solid rgb(128 128 128 / 30%) !important;
   border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 28%, transparent) !important;
   border-radius: 999px !important;
+  background: rgb(128 128 128 / 20%) !important;
   background: color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent) !important;
   background-image: none !important;
   box-shadow: inset 0 0.08rem 0.22rem rgb(0 0 0 / 24%);
@@ -75,7 +79,9 @@
 }
 
 #qyh-toast-blocker-panel .checkbox_label input[type="checkbox"]:checked {
+  border-color: #7064d8 !important;
   border-color: color-mix(in srgb, var(--SmartThemeQuoteColor, #7064d8) 90%, white 8%) !important;
+  background: #5a4fb8 !important;
   background: color-mix(in srgb, var(--SmartThemeQuoteColor, #7064d8) 78%, black 8%) !important;
 }
 
@@ -90,6 +96,7 @@
   gap: 0.5rem;
   margin: 0.75rem 0;
   padding: 0.7rem;
+  border: 1px solid rgb(128 128 128 / 20%);
   border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent);
   border-radius: 0.55rem;
 }
@@ -107,9 +114,12 @@
   min-height: 3.5rem;
   box-sizing: border-box;
   padding: 0.55rem 0.6rem;
+  border: 1px solid rgb(128 128 128 / 15%);
   border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 14%, transparent);
+  border-left: 0.25rem solid #777777;
   border-left: 0.25rem solid color-mix(in srgb, var(--qyh-toast-level-color) 42%, #777);
   border-radius: 0.45rem;
+  background: rgb(128 128 128 / 6%);
   background: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
   cursor: pointer;
   touch-action: manipulation;
@@ -118,20 +128,29 @@
 
 @media (hover: hover) {
   #qyh-toast-blocker-panel .qyh-toast-blocker-level:hover {
+    border-color: rgb(136 136 136 / 65%);
     border-color: color-mix(in srgb, var(--qyh-toast-level-color) 65%, transparent);
+    background: rgb(128 128 128 / 13%);
     background: color-mix(in srgb, var(--qyh-toast-level-color) 13%, transparent);
   }
 }
 
+/* 选中态：:has() 支持时优先它；旧 WebView 由 .is-selected 提供同款高亮。 */
+#qyh-toast-blocker-panel .qyh-toast-blocker-level.is-selected,
 #qyh-toast-blocker-panel .qyh-toast-blocker-level:has(input:checked) {
+  border-color: var(--qyh-toast-level-color);
   border-color: color-mix(in srgb, var(--qyh-toast-level-color) 82%, white 8%);
   border-left-color: var(--qyh-toast-level-color);
+  background: rgb(128 128 128 / 20%);
   background: color-mix(in srgb, var(--qyh-toast-level-color) 20%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(128 128 128 / 35%),
+    0 0.2rem 0.55rem rgb(0 0 0 / 14%);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qyh-toast-level-color) 35%, transparent),
     0 0.2rem 0.55rem rgb(0 0 0 / 14%);
 }
 
 #qyh-toast-blocker-panel .qyh-toast-blocker-level:focus-within {
+  outline: 2px solid var(--qyh-toast-level-color);
   outline: 2px solid color-mix(in srgb, var(--qyh-toast-level-color) 85%, white 10%);
   outline-offset: 2px;
 }
@@ -148,8 +167,10 @@
   padding: 0 !important;
   appearance: none !important;
   -webkit-appearance: none !important;
+  border: 1px solid rgb(128 128 128 / 30%) !important;
   border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor) 28%, transparent) !important;
   border-radius: 999px !important;
+  background: rgb(128 128 128 / 20%) !important;
   background: color-mix(in srgb, var(--SmartThemeBodyColor) 18%, transparent) !important;
   background-image: none !important;
   box-shadow: inset 0 0.08rem 0.22rem rgb(0 0 0 / 24%);
@@ -183,7 +204,9 @@
 }
 
 #qyh-toast-blocker-panel .qyh-toast-blocker-level input[type="checkbox"]:checked {
+  border-color: #707070 !important;
   border-color: color-mix(in srgb, var(--qyh-toast-level-color) 90%, white 8%) !important;
+  background: #3d3d3d !important;
   background: color-mix(in srgb, var(--qyh-toast-level-color) 78%, black 8%) !important;
 }
 
@@ -249,8 +272,10 @@
   gap: 0.15rem;
   margin: 0.65rem 0;
   padding: 0.6rem 0.7rem;
+  border: 1px solid rgb(47 150 180 / 42%);
   border: 1px solid color-mix(in srgb, #2f96b4 42%, transparent);
   border-radius: 0.5rem;
+  background: rgb(47 150 180 / 9%);
   background: color-mix(in srgb, #2f96b4 9%, transparent);
   font-size: 0.85em;
   line-height: 1.4;
@@ -263,8 +288,10 @@
 #qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics {
   margin: 0.7rem 0;
   padding: 0.65rem;
+  border: 1px solid rgb(112 100 216 / 42%);
   border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 42%, transparent);
   border-radius: 0.55rem;
+  background: rgb(112 100 216 / 7%);
   background: color-mix(in srgb, var(--SmartThemeQuoteColor) 7%, transparent);
 }
 
@@ -310,8 +337,10 @@
 #qyh-toast-blocker-panel .qyh-toast-blocker-status {
   margin: 0.75rem 0;
   padding: 0.6rem 0.75rem;
+  border: 1px solid rgb(112 100 216 / 45%);
   border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 45%, transparent);
   border-radius: 0.5rem;
+  background: rgb(112 100 216 / 10%);
   background: color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent);
   overflow-wrap: anywhere;
 }
@@ -319,14 +348,17 @@
 #qyh-toast-blocker-panel .qyh-toast-blocker-refresh-area {
   margin: 0.85rem 0;
   padding: 0.7rem;
+  border: 1px solid rgb(255 159 67 / 55%);
   border: 1px solid color-mix(in srgb, #ff9f43 55%, transparent);
   border-radius: 0.65rem;
+  background: rgb(255 159 67 / 10%);
   background: color-mix(in srgb, #ff9f43 10%, transparent);
 }
 
 #qyh-toast-blocker-panel .qyh-toast-blocker-refresh {
   width: 100%;
   min-height: 2.8rem;
+  border: 1px solid #ffb27a;
   border: 1px solid color-mix(in srgb, #ff9f43 75%, white);
   background: linear-gradient(135deg, #c76020, #e58b25);
   box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 22%);
@@ -420,6 +452,8 @@
   flex-direction: column;
   gap: 0.5rem;
   width: min(92vw, 32rem);
+  /* 旧 WebView 无 dvh 时退回 vh，避免整条声明被丢弃。 */
+  max-height: 92vh;
   max-height: 92dvh;
   padding: 0.5rem;
   overflow: hidden;
@@ -487,9 +521,11 @@
   margin: 0 !important;
   padding: 0.8rem 2.25rem 0.8rem 1rem !important;
   overflow: hidden;
+  border: 1px solid rgb(47 150 180 / 45%);
   border: 1px solid color-mix(in srgb, var(--qyh-toast-accent) 45%, transparent);
   border-left: 0.3rem solid var(--qyh-toast-accent);
   border-radius: 0.65rem;
+  background: #1d2026 !important;
   background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #20242b) 94%, black) !important;
   background-image: none !important;
   box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 28%);
@@ -558,8 +594,10 @@
   right: 0.55rem;
   min-width: 1.7rem;
   padding: 0.1rem 0.4rem;
+  border: 1px solid rgb(255 255 255 / 45%);
   border: 1px solid color-mix(in srgb, var(--qyh-toast-accent) 65%, white 8%);
   border-radius: 999px;
+  background: rgb(0 0 0 / 45%);
   background: color-mix(in srgb, var(--qyh-toast-accent) 35%, black 20%);
   color: #fff;
   font-size: 0.75rem;

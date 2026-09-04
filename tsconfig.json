@@ -3,11 +3,10 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "Bundler",
-    "baseUrl": ".",
     "paths": {
-      "/script.js": ["src/types/script.d.ts"],
-      "/scripts/extensions.js": ["src/types/extensions.d.ts"],
-      "/scripts/power-user.js": ["src/types/power-user.d.ts"]
+      "/script.js": ["./src/types/script.d.ts"],
+      "/scripts/extensions.js": ["./src/types/extensions.d.ts"],
+      "/scripts/power-user.js": ["./src/types/power-user.d.ts"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "rootDir": "src",

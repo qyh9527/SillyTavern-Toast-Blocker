@@ -41,6 +41,9 @@ test('runtime blocker suppresses then restores toastr methods', () => {
     getElementById(id) {
       return nodes.get(id) || null;
     },
+    querySelector() {
+      return null;
+    },
     querySelectorAll(selector) {
       queriedSelectors.push(selector);
       return [];
@@ -161,6 +164,89 @@ test('runtime blocker suppresses then restores toastr methods', () => {
         observerType: null,
       },
     });
+  } finally {
+    globalThis.document = originalDocument;
+    globalThis.MutationObserver = originalMutationObserver;
+    globalThis.toastr = originalToastr;
+    globalThis.jQuery = originalJQuery;
+  }
+});
+
+test('runtime observer targets the toast container only once it exists', () => {
+  const originalDocument = globalThis.document;
+  const originalMutationObserver = globalThis.MutationObserver;
+  const originalToastr = globalThis.toastr;
+  const originalJQuery = globalThis.jQuery;
+  const observeTargets = [];
+
+  class FakeMutationObserver {
+    constructor(callback) {
+      this.callback = callback;
+    }
+    observe(target, options) {
+      observeTargets.push({ target, options, subtree: Boolean(options && options.subtree) });
+    }
+    disconnect() {}
+  }
+
+  let container = null;
+  globalThis.document = {
+    querySelector(selector) {
+      if (selector === '#toast-container' && container) return container;
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    getElementById() {
+      return null;
+    },
+    createElement() {
+      return { id: '', textContent: '' };
+    },
+    head: { append() {} },
+    documentElement: { classList: { add() {} } },
+    addEventListener() {},
+    removeEventListener() {},
+    visibilityState: 'visible',
+  };
+  globalThis.MutationObserver = FakeMutationObserver;
+  globalThis.toastr = {
+    success: () => '',
+    info: () => '',
+    warning: () => '',
+    error: () => '',
+  };
+  globalThis.jQuery = () => ({ length: 0 });
+
+  try {
+    const blocker = new ToastRuntimeBlocker({});
+    blocker.configure({
+      blockerEnabled: true,
+      blockedLevels: { success: true, info: true, warning: true, error: true },
+      redrawEnabled: false,
+      redrawMaxVisible: 6,
+      redrawAggregateDuplicates: true,
+      diagnosticsEnabled: false,
+    });
+    assert.equal(blocker.getStatus().observingDom, true);
+    assert.equal(blocker.bootObserving, true);
+    // 容器缺失时应该监听整棵子树（documentElement），且只监听一次。
+    const rootTargets = observeTargets.filter(entry => entry.subtree === true);
+    assert.equal(rootTargets.length, 1);
+
+    // 主文档下后来出现 #toast-container：看电视狗带容器回来时立刻换成定向监听。
+    container = { id: 'toast-container', toastChildren: [] };
+    const before = observeTargets.length;
+    blocker.runWatchdogTick();
+    const subtrees = observeTargets.slice(before).filter(entry => entry.subtree === true);
+    assert.equal(subtrees.length, 0);
+    assert.ok(observeTargets.slice(before).some(entry => entry.target === container));
+    assert.equal(blocker.bootObserving, false);
+    // 定向监听只关注容器 childList。
+    const containerEntries = observeTargets.slice(before).filter(entry => entry.target === container);
+    assert.deepEqual(containerEntries.map(entry => entry.options), [{ childList: true }]);
+    blocker.stopWatchdog();
   } finally {
     globalThis.document = originalDocument;
     globalThis.MutationObserver = originalMutationObserver;

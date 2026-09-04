@@ -1,6 +1,9 @@
 import { DEFAULT_BLOCKED_LEVELS, REDRAW_READY_CLASS, TOAST_METHODS, buildManagedRules, getBlockedMethods, guardToastrMethods, } from './core.js';
 import { LightweightToastRenderer, guardToastrAuxiliaryMethods, } from './renderer.js';
 const RUNTIME_STYLE_ID = 'qyh-toast-blocker-runtime-style';
+const WATCHDOG_FAST_MS = 1000;
+const WATCHDOG_SLOW_MS = 5000;
+const WATCHDOG_FAST_TICKS = 8;
 export class ToastRuntimeBlocker {
     enabled = false;
     blockedLevels = { ...DEFAULT_BLOCKED_LEVELS };
@@ -15,6 +18,10 @@ export class ToastRuntimeBlocker {
     guardedTarget = null;
     observer = null;
     watchdog = null;
+    watchdogFastTicks = 0;
+    watchdogSlow = false;
+    watchdogBootWindow = false;
+    visibilityHandler = null;
     renderer;
     constructor({ onSuppressed = () => { }, onRedrawn = () => { }, onStateChanged = () => { } } = {}) {
         this.enabled = false;
@@ -145,35 +152,108 @@ export class ToastRuntimeBlocker {
             document.querySelectorAll(`#toast-container > .toast-${level}`).forEach(element => element.remove());
         }
     }
+    /** 看门狗是否处于整窗监听（启动等待容器阶段）。 */
+    get bootObserving() {
+        return Boolean(this.observer && this.watchdogBootWindow);
+    }
     startObserver() {
         if (this.observer || typeof MutationObserver !== 'function')
             return;
+        if (typeof document.querySelector !== 'function')
+            return;
         this.observer = new MutationObserver(() => this.removeBlockedToasts());
+        const container = document.querySelector('#toast-container');
+        if (container) {
+            // 容器已存在：只监听它的新增节点，聊天流式更新不再触发回调。
+            this.watchdogBootWindow = false;
+            this.observer.observe(container, { childList: true });
+            return;
+        }
+        // 容器尚未创建：短暂监听整棵子树，找到后立刻换成定向监听。
+        this.watchdogBootWindow = true;
+        const bootObserver = this.observer;
+        const retarget = () => {
+            const found = document.querySelector('#toast-container');
+            if (!found || this.observer !== bootObserver)
+                return;
+            bootObserver.disconnect();
+            bootObserver.observe(found, { childList: true });
+            this.watchdogBootWindow = false;
+        };
+        this.observer = new MutationObserver(retarget);
         this.observer.observe(document.documentElement, { childList: true, subtree: true });
+        retarget();
     }
     stopObserver() {
         this.observer?.disconnect();
         this.observer = null;
+        this.watchdogBootWindow = false;
     }
     startWatchdog() {
-        if (this.watchdog)
+        if (this.watchdog || this.visibilityHandler)
             return;
-        this.watchdog = setInterval(() => {
-            if (!this.isEffective())
-                return;
-            if (this.isBlockerEffective())
-                this.ensureRuntimeStyle();
-            this.patchCurrentToastr();
-            if (this.isBlockerEffective())
-                this.removeBlockedToasts();
-            if (this.redrawEnabled)
-                this.adoptExistingNativeToasts();
-        }, 1000);
+        this.watchdogFastTicks = 0;
+        this.watchdogSlow = false;
+        if (typeof document.addEventListener === 'function') {
+            this.visibilityHandler = () => {
+                if (document.visibilityState === 'visible') {
+                    // 回到前台：先立即检查，再恢复周期巡检。
+                    if (!this.watchdog && this.visibilityHandler) {
+                        this.watchdog = setInterval(() => this.runWatchdogTick(), this.watchdogSlow ? WATCHDOG_SLOW_MS : WATCHDOG_FAST_MS);
+                    }
+                    this.runWatchdogTick();
+                }
+                else {
+                    // 进入后台：暂停定时器，浏览器本就节流后台计时器。
+                    this.stopWatchdogTimer();
+                }
+            };
+            document.addEventListener('visibilitychange', this.visibilityHandler);
+        }
+        this.watchdog = setInterval(() => this.runWatchdogTick(), WATCHDOG_FAST_MS);
     }
-    stopWatchdog() {
+    runWatchdogTick() {
+        if (!this.isEffective())
+            return;
+        if (this.watchdogBootWindow)
+            this.retargetObserverToContainer();
+        if (this.isBlockerEffective())
+            this.ensureRuntimeStyle();
+        this.patchCurrentToastr();
+        if (this.isBlockerEffective())
+            this.removeBlockedToasts();
+        if (this.redrawEnabled)
+            this.adoptExistingNativeToasts();
+        this.watchdogFastTicks += 1;
+        if (!this.watchdogSlow && this.watchdogFastTicks >= WATCHDOG_FAST_TICKS) {
+            // 启动阶段的密集检查结束后退避到低频巡检，降低常驻唤醒开销。
+            this.watchdogSlow = true;
+            this.stopWatchdogTimer();
+            this.watchdog = setInterval(() => this.runWatchdogTick(), WATCHDOG_SLOW_MS);
+        }
+    }
+    /** 启动等待期内若容器已出现，把整窗监听收敛为容器定向监听。 */
+    retargetObserverToContainer() {
+        const found = typeof document.querySelector === 'function'
+            ? document.querySelector('#toast-container')
+            : null;
+        if (!found || !this.observer)
+            return;
+        this.observer.disconnect();
+        this.observer.observe(found, { childList: true });
+        this.watchdogBootWindow = false;
+    }
+    stopWatchdogTimer() {
         if (this.watchdog)
             clearInterval(this.watchdog);
         this.watchdog = null;
+    }
+    stopWatchdog() {
+        this.stopWatchdogTimer();
+        if (this.visibilityHandler && typeof document.removeEventListener === 'function') {
+            document.removeEventListener('visibilitychange', this.visibilityHandler);
+        }
+        this.visibilityHandler = null;
     }
     resetDiagnostics() {
         this.renderer.resetDiagnostics();

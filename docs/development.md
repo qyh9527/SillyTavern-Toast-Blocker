@@ -1,6 +1,6 @@
 # SillyTavern Toast Blocker 开发文档
 
-> 文档对应版本：`1.4.3`（浏览器验收进行中，真机回测待补）
+> 文档对应版本：`1.4.3`（自动化验收通过，真机回测待补）
 > 修订日期：2026-09-05
 > 仓库：<https://github.com/qyh9527/SillyTavern-Toast-Blocker>
 > 运行环境：原生 SillyTavern、TauriTavern 及其系统 WebView
@@ -93,7 +93,7 @@ flowchart TD
   "loading_order": -100000,
   "js": "dist/index.js",
   "css": "style-status.css",
-  "version": "1.4.1",
+  "version": "1.4.3",
   "auto_update": true,
   "minimum_client_version": "1.12.13"
 }
@@ -666,21 +666,21 @@ npm run test:e2e
 | `host-adapter.test.mjs` | context/混合/旧宿主路径、真实保存屏障和失效处理 |
 | `self-check.test.mjs` | 敏感字段排除、异常提示和剪贴板降级 |
 | `e2e/plugin.spec.mjs` | 实际 jQuery/Toastr 加载的浏览器交互测试 |
-| `style.test.mjs` | 移动端 2×2 布局、选中态、胶囊开关和无勾号回归 |
+| `style.test.mjs`、`compact-style.test.mjs`、`status-header.test.mjs` | 基础皮肤、紧凑布局、状态头与宿主显示控制约束 |
 
 本轮验证记录（2026-09-05，v1.4.3）：
 
 | 检查 | 状态 |
 | --- | --- |
-| 类型检查、Node 单元测试 | 本地通过，55/55 项单测 |
-| 版本与入口一致性 | 目标版本 1.4.3，提交前执行检查 |
-| 编译产物同步 | 提交后重建，检查 `dist` 无差异 |
-| 浏览器测试 | 12 个场景 × 4 组合，等待远端 CI 验收 |
+| 类型检查、Node 单元测试 | 本地和远端均通过，55/55 项单测 |
+| 版本与入口一致性 | 通过，版本 1.4.3、清单入口与编译版本一致 |
+| 编译产物同步 | 本地和 CI 均通过，重建 `dist` 无差异 |
+| 浏览器测试 | 远端 48/48 通过，12 个场景 × 4 组合；无重试、跳过或失败 |
 | 真机 ST/TT | 待设备回测，浏览器模拟不替代真机 |
 
 失败基线：[工作流 33963824979](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33963824979)，提交 `914cd72`：55 项单测通过，E2E 38/40，两项移动布局失败。此前夹具硬编码加载 `style.css`，与 manifest 中的 `style-status.css` 不一致，因此旧版通过记录不能验证后续状态头样式。
 
-v1.4.3 的服务器按 `manifest.json` 注入 CSS/JS 入口；新增初始折叠、反复展开后顶部位置、正在编辑的数字不被通知刷新覆盖的回归。本地浏览器下载超时，完整跨引擎验收交由 GitHub Actions 执行，完成后回填结果。
+v1.4.3 的服务器按 `manifest.json` 注入 CSS/JS 入口；新增初始折叠、反复展开后顶部位置、正在编辑的数字不被通知刷新覆盖的回归。本地浏览器下载超时，完整跨引擎验收已由 [GitHub Actions #37](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33964278185) 完成：提交 `18b0dff`，55 项单测与 48 项浏览器测试全部通过。后续文档提交仅补充此记录，不改变已验收代码。
 
 v1.4.1 验证证据：[GitHub Actions #17](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33951559152)，运行时代码提交 `9e232aae2add8c99816cbd5f0da63f67805587ff`，46 项单测与 40 项浏览器用例均通过。
 
@@ -724,6 +724,8 @@ E2E 当前覆盖：屏蔽/聚合/恢复原生、启动通知上限与按钮/移�
 17. 启动通知超过上限时旧通知被移除，按钮仍能执行操作，停用后无残余重绘容器。
 18. 原生启动通知自然消失后 `adoptedActive` 归零；不要将其计时当作插件可冻结的计时。
 19. 在真实宿主中确认没有空白报告框，概览未采样时不是 0 ms，整页长帧不被标为插件故障。
+20. 主抽屉默认折叠，反复展开后状态头位于分类屏蔽上方；诊断概览独立开关。
+21. 编辑“最大同时显示”时触发通知，输入不应被重置；离开输入框后保存 1–20 范围内的数值。
 
 ## 24. 新增设置项的标准步骤
 

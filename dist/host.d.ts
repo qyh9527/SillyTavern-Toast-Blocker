@@ -1,3 +1,4 @@
+import { type HostAdapter } from './host-adapter.js';
 import { type ToastLevel, type ToastBlockerSettings } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
 import { type TimedConfirmation } from './interaction.js';
@@ -13,6 +14,7 @@ interface PublicStatus extends Record<string, unknown> {
     settings: ToastBlockerSettings;
 }
 declare class ToastBlockerHost {
+    private readonly adapter;
     settings: ToastBlockerSettings;
     preloadPresentAtBoot: boolean;
     suppressedCount: number;
@@ -23,7 +25,7 @@ declare class ToastBlockerHost {
     refreshConfirmation: TimedConfirmation;
     statusRenderScheduled: boolean;
     statusRenderTimer: ReturnType<typeof setTimeout> | null;
-    constructor();
+    constructor(adapter: HostAdapter);
     activate({ forceSave }?: {
         forceSave?: boolean;
     }): Promise<void>;
@@ -42,6 +44,8 @@ declare class ToastBlockerHost {
     setRedrawMaxVisible(value: unknown): Promise<void>;
     setAggregateDuplicates(enabled: boolean): Promise<void>;
     setDiagnosticsEnabled(enabled: boolean): Promise<void>;
+    selfCheck(): string;
+    copySelfCheck(): Promise<void>;
     resetDiagnostics(): void;
     shutdown(): Promise<void>;
     requestFrontendRefresh(button: HTMLButtonElement): Promise<void>;
@@ -56,5 +60,5 @@ declare class ToastBlockerHost {
     private paintStatusNow;
     getPublicStatus(): PublicStatus;
 }
-export declare function installToastBlockerHost(): ToastBlockerHost;
+export declare function installToastBlockerHost(): Promise<ToastBlockerHost>;
 export {};

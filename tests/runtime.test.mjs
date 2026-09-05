@@ -83,6 +83,7 @@ test('runtime blocker suppresses then restores toastr methods', () => {
       redraw: {
         enabled: false,
         active: 0,
+        adoptedActive: 0,
         pending: 0,
         rendered: 0,
         evicted: 0,
@@ -145,6 +146,7 @@ test('runtime blocker suppresses then restores toastr methods', () => {
       redraw: {
         enabled: false,
         active: 0,
+        adoptedActive: 0,
         pending: 0,
         rendered: 0,
         evicted: 0,
@@ -253,4 +255,55 @@ test('runtime observer targets the toast container only once it exists', () => {
     globalThis.toastr = originalToastr;
     globalThis.jQuery = originalJQuery;
   }
+});
+
+test('delayed container retargets the same observer, cleans immediately and handles replacement', () => {
+  const previousDocument = globalThis.document;
+  const previousObserver = globalThis.MutationObserver;
+  let container = null;
+  let cleanups = 0;
+  const root = {};
+  const observations = [];
+  const observers = [];
+  globalThis.document = {
+    documentElement: root,
+    querySelector: () => container,
+    querySelectorAll: () => { cleanups++; return []; },
+  };
+  globalThis.MutationObserver = class {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe(target, options) { observations.push({ target, options }); }
+    disconnect() {}
+  };
+  const runtime = new ToastRuntimeBlocker();
+  try {
+    runtime.startObserver();
+    assert.equal(observers.length, 1);
+    assert.equal(observations[0].target, root);
+    container = { isConnected: true };
+    observers[0].callback();
+    assert.equal(runtime.bootObserving, false);
+    assert.equal(observations.at(-1).target, container);
+    assert.equal(observations.at(-1).options.subtree, undefined);
+    assert.ok(cleanups > 0);
+    runtime.enabled = true;
+    runtime.ensureRuntimeStyle = () => {};
+    runtime.patchCurrentToastr = () => {};
+    container.isConnected = false;
+    container = { isConnected: true };
+    runtime.runWatchdogTick();
+    assert.equal(observations.at(-1).target, container);
+    assert.equal(runtime.observedContainer, container);
+  } finally {
+    runtime.stopObserver(); runtime.stopWatchdog();
+    globalThis.document = previousDocument; globalThis.MutationObserver = previousObserver;
+  }
+});
+
+test('watchdog does not start while page is already hidden', () => {
+  const previousDocument = globalThis.document;
+  globalThis.document = { visibilityState: 'hidden', addEventListener() {}, removeEventListener() {} };
+  const runtime = new ToastRuntimeBlocker();
+  try { runtime.startWatchdog(); assert.equal(runtime.watchdog, null); }
+  finally { runtime.stopWatchdog(); globalThis.document = previousDocument; }
 });

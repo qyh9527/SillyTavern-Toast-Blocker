@@ -61,6 +61,7 @@ export class ToastRuntimeBlocker {
   auxiliaryGuard: ToastrAuxiliaryGuard | null = null;
   guardedTarget: Record<string, unknown> | null = null;
   observer: MutationObserver | null = null;
+  observedContainer: Element | null = null;
   watchdog: ReturnType<typeof setInterval> | null = null;
   watchdogFastTicks = 0;
   watchdogSlow = false;
@@ -214,7 +215,7 @@ export class ToastRuntimeBlocker {
     }
   }
 
-/** 看门狗是否处于整窗监听（启动等待容器阶段）。 */
+  /** 看门狗是否处于整窗监听（启动等待容器阶段）。 */
   get bootObserving(): boolean {
     return Boolean(this.observer && this.watchdogBootWindow);
   }
@@ -222,31 +223,22 @@ export class ToastRuntimeBlocker {
   startObserver(): void {
     if (this.observer || typeof MutationObserver !== 'function') return;
     if (typeof document.querySelector !== 'function') return;
-    this.observer = new MutationObserver(() => this.removeBlockedToasts());
+    this.observer = new MutationObserver(() => {
+      if (this.watchdogBootWindow) this.retargetObserverToContainer();
+      this.removeBlockedToasts();
+    });
     const container = document.querySelector('#toast-container');
-    if (container) {
-      // 容器已存在：只监听它的新增节点，聊天流式更新不再触发回调。
-      this.watchdogBootWindow = false;
-      this.observer.observe(container, { childList: true });
-      return;
-    }
-    // 容器尚未创建：短暂监听整棵子树，找到后立刻换成定向监听。
-    this.watchdogBootWindow = true;
-    const bootObserver = this.observer;
-    const retarget = () => {
-      const found = document.querySelector('#toast-container');
-      if (!found || this.observer !== bootObserver) return;
-      bootObserver.disconnect();
-      bootObserver.observe(found, { childList: true });
-      this.watchdogBootWindow = false;
-    };
-    this.observer = new MutationObserver(retarget);
-    this.observer.observe(document.documentElement, { childList: true, subtree: true });
-    retarget();
+    this.observedContainer = container;
+    this.watchdogBootWindow = !container;
+    this.observer.observe(container ?? document.documentElement, {
+      childList: true,
+      subtree: !container,
+    });
   }
   stopObserver(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.observedContainer = null;
     this.watchdogBootWindow = false;
   }
 
@@ -269,16 +261,25 @@ export class ToastRuntimeBlocker {
       };
       document.addEventListener('visibilitychange', this.visibilityHandler);
     }
-    this.watchdog = setInterval(() => this.runWatchdogTick(), WATCHDOG_FAST_MS);
+    if (document.visibilityState !== 'hidden') {
+      this.watchdog = setInterval(() => this.runWatchdogTick(), WATCHDOG_FAST_MS);
+    }
   }
 
   runWatchdogTick(): void {
     if (!this.isEffective()) return;
+    if (this.observer && this.observedContainer && !this.observedContainer.isConnected) {
+      this.stopObserver();
+      this.startObserver();
+    }
     if (this.watchdogBootWindow) this.retargetObserverToContainer();
     if (this.isBlockerEffective()) this.ensureRuntimeStyle();
     this.patchCurrentToastr();
     if (this.isBlockerEffective()) this.removeBlockedToasts();
-    if (this.redrawEnabled) this.adoptExistingNativeToasts();
+    if (this.redrawEnabled) {
+      this.renderer.pruneDetachedToasts();
+      this.adoptExistingNativeToasts();
+    }
     this.watchdogFastTicks += 1;
     if (!this.watchdogSlow && this.watchdogFastTicks >= WATCHDOG_FAST_TICKS) {
       // 启动阶段的密集检查结束后退避到低频巡检，降低常驻唤醒开销。
@@ -296,6 +297,7 @@ export class ToastRuntimeBlocker {
     if (!found || !this.observer) return;
     this.observer.disconnect();
     this.observer.observe(found, { childList: true });
+    this.observedContainer = found;
     this.watchdogBootWindow = false;
   }
 

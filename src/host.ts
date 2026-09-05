@@ -1,6 +1,5 @@
-import { saveSettings, saveSettingsDebounced } from '/script.js';
-import { extension_settings } from '/scripts/extensions.js';
-import { power_user } from '/scripts/power-user.js';
+import { resolveHostAdapter, type HostAdapter } from './host-adapter.js';
+import { createSelfCheckReport, copyReport } from './self-check.js';
 import {
   SETTINGS_KEY,
   TOAST_METHODS,
@@ -43,11 +42,11 @@ class ToastBlockerHost {
   statusRenderScheduled = false;
   statusRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor() {
-    const stored = normalizeSettings(extension_settings[SETTINGS_KEY]);
-    extension_settings[SETTINGS_KEY] = stored;
+  constructor(private readonly adapter: HostAdapter) {
+    const stored = normalizeSettings(this.adapter.extensionSettings[SETTINGS_KEY]);
+    this.adapter.extensionSettings[SETTINGS_KEY] = stored;
     this.settings = stored;
-    this.preloadPresentAtBoot = hasManagedCss(power_user.custom_css);
+    this.preloadPresentAtBoot = hasManagedCss(this.adapter.powerUserSettings.custom_css);
     this.runtime = new ToastRuntimeBlocker({
       onSuppressed: data => {
         this.suppressedCount += 1;
@@ -77,7 +76,7 @@ class ToastBlockerHost {
 
   async install(): Promise<void> {
     this.settings.enabled = true;
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     await this.applyPreference({ forceSave: true });
     await this.mountPanelWhenReady();
   }
@@ -109,7 +108,7 @@ class ToastBlockerHost {
       diagnosticsEnabled: this.settings.diagnosticsEnabled,
     });
     await this.persistPreloadCss(false, this.settings.blockedLevels, false, false);
-    delete extension_settings[SETTINGS_KEY];
+    delete this.adapter.extensionSettings[SETTINGS_KEY];
     await this.forceSave();
     this.panel?.remove();
     this.panel = null;
@@ -128,7 +127,7 @@ class ToastBlockerHost {
 
   async setEnabled(enabled: boolean): Promise<void> {
     this.settings.enabled = Boolean(enabled);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.statusText = '正在保存…';
     this.renderStatus();
     this.applyRuntimeSettings();
@@ -149,7 +148,7 @@ class ToastBlockerHost {
 
   async setLevel(level: ToastLevel, blocked: boolean): Promise<void> {
     this.settings.blockedLevels[level] = Boolean(blocked);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.statusText = '正在保存类型设置…';
     this.renderStatus();
     this.applyRuntimeSettings();
@@ -167,7 +166,7 @@ class ToastBlockerHost {
 
   async setAllLevels(blocked: boolean): Promise<void> {
     for (const level of TOAST_METHODS) this.settings.blockedLevels[level] = blocked;
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.applyRuntimeSettings();
     await this.persistPreloadCss(
       this.settings.enabled,
@@ -182,14 +181,14 @@ class ToastBlockerHost {
 
   async setLogging(enabled: boolean): Promise<void> {
     this.settings.logSuppressed = Boolean(enabled);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     await this.forceSave();
     this.renderStatus();
   }
 
   async setRedrawEnabled(enabled: boolean): Promise<void> {
     this.settings.redrawEnabled = Boolean(enabled);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.applyRuntimeSettings();
     await this.persistPreloadCss(
       this.settings.enabled,
@@ -206,7 +205,7 @@ class ToastBlockerHost {
 
   async setRedrawMaxVisible(value: unknown): Promise<void> {
     this.settings.redrawMaxVisible = normalizeMaxVisible(value);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.applyRuntimeSettings();
     await this.forceSave();
     this.renderStatus();
@@ -214,7 +213,7 @@ class ToastBlockerHost {
 
   async setAggregateDuplicates(enabled: boolean): Promise<void> {
     this.settings.redrawAggregateDuplicates = Boolean(enabled);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.applyRuntimeSettings();
     await this.forceSave();
     this.statusText = this.settings.redrawAggregateDuplicates
@@ -225,12 +224,29 @@ class ToastBlockerHost {
 
   async setDiagnosticsEnabled(enabled: boolean): Promise<void> {
     this.settings.diagnosticsEnabled = Boolean(enabled);
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.applyRuntimeSettings();
     await this.forceSave();
     this.statusText = this.settings.diagnosticsEnabled
       ? '本地性能诊断已启用；不会上传或记录 Toast 正文'
       : '本地性能诊断已关闭';
+    this.renderStatus();
+  }
+
+  selfCheck(): string {
+    return createSelfCheckReport(this.getPublicStatus(), this.adapter.source);
+  }
+
+  async copySelfCheck(): Promise<void> {
+    const report = this.selfCheck();
+    const copied = await copyReport(report);
+    const output = this.panel?.querySelector<HTMLTextAreaElement>(`#${APP_ID}-report`);
+    if (output) {
+      output.hidden = copied;
+      output.value = copied ? '' : report;
+      if (!copied) { output.focus(); output.select(); }
+    }
+    this.statusText = copied ? '自检报告已复制；不含聊天正文或密钥' : '无法自动复制，请复制下方已选中的自检报告';
     this.renderStatus();
   }
 
@@ -243,7 +259,7 @@ class ToastBlockerHost {
   async shutdown(): Promise<void> {
     this.settings.enabled = false;
     this.settings.redrawEnabled = false;
-    extension_settings[SETTINGS_KEY] = this.settings;
+    this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
     this.applyRuntimeSettings();
     await this.persistPreloadCss(false, this.settings.blockedLevels, false, true);
     this.statusText = '屏蔽器与重绘器均已关闭，早期规则已清理';
@@ -300,14 +316,14 @@ class ToastBlockerHost {
     hideNativeUntilRedrawReady: boolean,
     forceSave: boolean,
   ): Promise<boolean> {
-    const before = typeof power_user.custom_css === 'string' ? power_user.custom_css : '';
+    const before = typeof this.adapter.powerUserSettings.custom_css === 'string' ? this.adapter.powerUserSettings.custom_css : '';
     const after = updateManagedCss(before, enabled, levels, hideNativeUntilRedrawReady);
     if (before === after) {
       if (forceSave) await this.forceSave();
       return false;
     }
 
-    power_user.custom_css = after;
+    this.adapter.powerUserSettings.custom_css = after;
     const textarea = document.getElementById('customCSS') as HTMLTextAreaElement | null;
     if (textarea) textarea.value = after;
 
@@ -320,13 +336,13 @@ class ToastBlockerHost {
     customStyle.textContent = after;
 
     if (forceSave) await this.forceSave();
-    else saveSettingsDebounced();
+    else this.adapter.saveSettingsDebounced();
     return true;
   }
 
   async forceSave(): Promise<void> {
     try {
-      await saveSettings();
+      await this.adapter.saveSettings();
     } catch (error) {
       console.error(`[${APP_ID}] failed to save settings`, error);
       this.statusText = `保存失败：${error instanceof Error ? error.message : String(error)}`;
@@ -471,8 +487,10 @@ class ToastBlockerHost {
         </div>
         <div class="qyh-toast-blocker-actions">
           <button id="${APP_ID}-repair" class="menu_button">修复早期规则</button>
+          <button id="${APP_ID}-self-check" class="menu_button" type="button">一键自检并复制报告</button>
           <button id="${APP_ID}-cleanup" class="menu_button">关闭并清理</button>
         </div>
+        <textarea id="${APP_ID}-report" class="text_pole" readonly hidden rows="10" aria-label="自检报告，可手动复制"></textarea>
         <p class="qyh-toast-blocker-help">首次安装或重新启用后建议重启一次酒馆。关闭、禁用或删除扩展时会清理持久规则。</p>
       </div>`;
     parent.append(wrapper);
@@ -525,6 +543,10 @@ class ToastBlockerHost {
     wrapper.querySelector<HTMLButtonElement>(`#${APP_ID}-refresh`)?.addEventListener('click', event => {
       void this.requestFrontendRefresh(event.currentTarget as HTMLButtonElement);
     });
+    wrapper.querySelector(`#${APP_ID}-self-check`)?.addEventListener('click', () => {
+      void this.copySelfCheck();
+    });
+    wrapper.querySelector('.inline-drawer-toggle')?.addEventListener('click', () => this.renderStatus());
     this.renderStatus();
   }
 
@@ -552,10 +574,8 @@ class ToastBlockerHost {
   /** 抽屉合上时跳过诊断数字刷新，只保留轻量的状态行与开关回显。 */
   private isDiagnosticsVisible(): boolean {
     if (!this.panel?.isConnected) return false;
-    if (typeof this.panel.closest !== 'function') return true;
-    const drawer = this.panel.closest('.inline-drawer');
-    if (!drawer || typeof drawer.classList.contains !== 'function') return true;
-    return !drawer.classList.contains('inline-drawer-collapsed');
+    const content = this.panel.querySelector<HTMLElement>('.inline-drawer-content');
+    return Boolean(this.settings.diagnosticsEnabled && content && content.getClientRects().length > 0);
   }
 
   private paintStatusNow(): void {
@@ -613,7 +633,7 @@ class ToastBlockerHost {
             : '当前 WebView 不提供页面长帧条目；批次耗时诊断仍正常工作。';
       }
     }
-    const earlyRule = hasManagedCss(power_user.custom_css);
+    const earlyRule = hasManagedCss(this.adapter.powerUserSettings.custom_css);
     const status = this.panel.querySelector(`#${APP_ID}-status`);
     if (!status) return;
     if (this.statusText) {
@@ -636,17 +656,21 @@ class ToastBlockerHost {
   getPublicStatus(): PublicStatus {
     return {
       ...this.runtime.getStatus(),
-      earlyRuleInstalled: hasManagedCss(power_user.custom_css),
+      earlyRuleInstalled: hasManagedCss(this.adapter.powerUserSettings.custom_css),
       suppressedThisSession: this.suppressedCount,
       settings: { ...this.settings, blockedLevels: { ...this.settings.blockedLevels } },
     };
   }
 }
 
-export function installToastBlockerHost(): ToastBlockerHost {
+export async function installToastBlockerHost(): Promise<ToastBlockerHost> {
   const shared = globalThis as typeof globalThis & Record<PropertyKey, unknown>;
   if (shared[INSTANCE_KEY]) return shared[INSTANCE_KEY] as ToastBlockerHost;
-  const host = new ToastBlockerHost();
+  const pending = resolveHostAdapter().then(adapter => new ToastBlockerHost(adapter));
+  shared[INSTANCE_KEY] = pending;
+  let host: ToastBlockerHost;
+  try { host = await pending; }
+  catch (error) { delete shared[INSTANCE_KEY]; throw error; }
   shared[INSTANCE_KEY] = host;
   globalThis.ToastBlocker = Object.freeze({
     enable: () => host.setEnabled(true),
@@ -659,7 +683,8 @@ export function installToastBlockerHost(): ToastBlockerHost {
     shutdown: () => host.shutdown(),
     setLevel: (level: ToastLevel, blocked: boolean) => host.setLevel(level, blocked),
     status: () => host.getPublicStatus(),
+    selfCheck: () => host.selfCheck(),
   });
-  void host.activate();
+  void host.activate().catch(error => console.error(`[${APP_ID}] 启动失败`, error));
   return host;
 }

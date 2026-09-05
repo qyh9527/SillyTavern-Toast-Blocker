@@ -484,3 +484,55 @@ test('clear/remove compatibility guard recognizes asynchronous redraw handles', 
     browser.restore();
   }
 });
+
+test('adopted and generated toasts share the visible ceiling and auxiliary removal never recurses', async () => {
+  const browser = installFakeBrowser();
+  const renderer = new LightweightToastRenderer();
+  try {
+    renderer.configure(true, 2);
+    const native = [new FakeElement('div'), new FakeElement('div'), new FakeElement('div')];
+    for (const element of native) { element.className = 'toast toast-info'; browser.body.append(element); }
+    let nativeRemovals = 0;
+    const toastr = { remove: handle => { nativeRemovals++; handle[0].remove(); } };
+    const guard = guardToastrAuxiliaryMethods(toastr, renderer);
+    renderer.adoptNativeToasts(native, { newestOnTop: false }, element => toastr.remove(globalThis.jQuery(element)));
+    assert.equal(renderer.getStats().active, 2);
+    assert.equal(renderer.getStats().adoptedActive, 2);
+    assert.equal(native[0].isConnected, false);
+    renderer.show('error', ['new', '', { timeOut: 0 }], () => {}, {});
+    await Promise.resolve(); browser.frames.shift()(16);
+    assert.equal(renderer.getStats().active, 2);
+    assert.equal(renderer.getStats().adoptedActive, 1);
+    toastr.remove(globalThis.jQuery(native[2]));
+    assert.equal(renderer.getStats().adoptedActive, 0);
+    assert.equal(nativeRemovals, 3);
+    renderer.stop(); guard.restore();
+    assert.equal(renderer.getStats().active, 0);
+    assert.equal(browser.body.children.length, 0);
+  } finally { renderer.stop(); browser.restore(); }
+});
+
+test('native timers may remove adopted nodes; pruning releases references without duplicate callbacks', () => {
+  const browser = installFakeBrowser();
+  const renderer = new LightweightToastRenderer();
+  try {
+    renderer.configure(true, 3);
+    const native = new FakeElement('div'); native.className = 'toast toast-info'; browser.body.append(native);
+    let dismissed = 0;
+    renderer.adoptNativeToasts([native], {}, () => { dismissed++; });
+    native.remove(); renderer.pruneDetachedToasts();
+    assert.equal(renderer.getStats().active, 0);
+    assert.equal(renderer.getStats().adoptedActive, 0);
+    assert.equal(renderer.ownsHandle(globalThis.jQuery(native)), false);
+    assert.equal(dismissed, 0);
+    assert.equal(browser.body.children.length, 0);
+  } finally { renderer.stop(); browser.restore(); }
+});
+
+test('empty startup adoption creates no persistent container', () => {
+  const browser = installFakeBrowser(); const renderer = new LightweightToastRenderer();
+  try {
+    renderer.configure(true, 6); renderer.adoptNativeToasts([], {}, () => {});
+    assert.equal(browser.body.children.length, 0);
+  } finally { renderer.stop(); browser.restore(); }
+});

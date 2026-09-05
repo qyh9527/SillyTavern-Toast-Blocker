@@ -111,6 +111,7 @@ interface RendererCallbacks {
 export interface RedrawStats {
   enabled: boolean;
   active: number;
+  adoptedActive: number;
   pending: number;
   rendered: number;
   evicted: number;
@@ -211,6 +212,10 @@ export class LightweightToastRenderer {
   aggregateDuplicates = true;
   diagnosticsEnabled = false;
   private active = new Map<HTMLElement, ActiveToast>();
+  private adopted = new Map<HTMLElement, { dismiss: (element: HTMLElement) => void; click: () => void }>();
+  private visibleOrder = new Set<HTMLElement>();
+  private containerObserver: MutationObserver | null = null;
+  private observedContainers = new Set<HTMLElement>();
   private containers = new WeakMap<Element, Map<string, HTMLElement>>();
   private evicted = 0;
   private fallbacks = 0;
@@ -332,7 +337,7 @@ export class LightweightToastRenderer {
   }
 
   ownsHandle(handle: unknown): boolean {
-    return this.elementsFromHandle(handle).some(element => element.hasAttribute(TOAST_ATTRIBUTE));
+    return this.elementsFromHandle(handle).some(element => element.hasAttribute(TOAST_ATTRIBUTE) || this.adopted.has(element));
   }
 
   /**
@@ -348,7 +353,6 @@ export class LightweightToastRenderer {
     const options = mergeOptions(globalOptions, {});
     const target = this.resolveTarget(options.target);
     if (!target) return 0;
-    const container = this.getContainer(target, options.positionClass);
     const adopted: HTMLElement[] = [];
     for (const candidate of elements) {
       if (!isElement(candidate) || candidate.hasAttribute(ADOPTED_ATTRIBUTE)) continue;
@@ -365,31 +369,29 @@ export class LightweightToastRenderer {
       element.setAttribute('aria-atomic', 'true');
       element.style.setProperty('--qyh-redraw-show-duration', `${options.showDuration}ms`);
       element.style.setProperty('--qyh-redraw-hide-duration', `${options.hideDuration}ms`);
-      element.addEventListener('click', () => {
-        setTimeout(() => {
-          if (!element.isConnected) return;
-          try {
-            dismiss(element);
-          } catch (error) {
-            this.onError(error);
-            element.remove();
-          }
-        }, 0);
-      });
+      const click = () => {
+        setTimeout(() => this.dismissElement(element, true, true, false), 0);
+      };
+      element.addEventListener('click', click);
+      this.adopted.set(element, { dismiss, click });
       adopted.push(element);
     }
     if (adopted.length === 0) return 0;
+    const container = this.getContainer(target, options.positionClass);
+    // 原生容器默认新通知在前；统一按最旧到最新登记淘汰顺序。
+    for (const element of options.newestOnTop ? [...adopted].reverse() : adopted) this.visibleOrder.add(element);
     const fragment = this.toFragment(adopted);
     if (options.newestOnTop) container.prepend(fragment);
     else container.append(fragment);
     this.rendered += adopted.length;
+    this.enforceVisibleLimit();
     this.onRendered();
     this.onStateChanged();
     return adopted.length;
   }
 
   clear(handle: unknown, { force = false, immediate = false } = {}): boolean {
-    const elements = this.elementsFromHandle(handle).filter(element => element.hasAttribute(TOAST_ATTRIBUTE));
+    const elements = this.elementsFromHandle(handle).filter(element => element.hasAttribute(TOAST_ATTRIBUTE) || this.adopted.has(element));
     if (elements.length === 0) return false;
     for (const element of elements) this.dismissElement(element, force, immediate, false);
     return true;
@@ -397,7 +399,7 @@ export class LightweightToastRenderer {
 
   clearAll(immediate = false): void {
     for (const request of [...this.pending]) this.dismissElement(request.element, true, true, false);
-    for (const element of [...this.active.keys()]) this.dismissElement(element, true, immediate, false);
+    for (const element of [...this.visibleOrder]) this.dismissElement(element, true, immediate, false);
   }
 
   stop(): void {
@@ -405,6 +407,9 @@ export class LightweightToastRenderer {
     this.frameId = null;
     this.clearAll(true);
     this.pending.length = 0;
+    this.containerObserver?.disconnect();
+    this.containerObserver = null;
+    this.observedContainers.clear();
     this.enabled = false;
     this.previousMessage = undefined;
     this.stopVisibilityTracking();
@@ -415,7 +420,8 @@ export class LightweightToastRenderer {
     const pausedForVisibility = [...this.active.values()].filter(state => state.visibilityPaused).length;
     return {
       enabled: this.enabled,
-      active: this.active.size,
+      active: this.active.size + this.adopted.size,
+      adoptedActive: this.adopted.size,
       pending: this.pending.length,
       rendered: this.rendered,
       evicted: this.evicted,
@@ -674,6 +680,11 @@ export class LightweightToastRenderer {
       if (target !== document.body) container.classList.add('qyh-toast-redraw-container--targeted');
       target.append(container);
       targetContainers.set(key, container);
+      this.observedContainers.add(container);
+      if (typeof MutationObserver === 'function') {
+        this.containerObserver ??= new MutationObserver(() => this.pruneDetachedToasts());
+        this.containerObserver.observe(container, { childList: true });
+      }
     }
     return container;
   }
@@ -749,6 +760,7 @@ export class LightweightToastRenderer {
       visibilityPaused: false,
     };
     this.active.set(element, state);
+    this.visibleOrder.add(element);
     this.rendered += 1;
     element.classList.add('qyh-toast-redraw--entering');
     element.addEventListener('click', event => {
@@ -910,6 +922,18 @@ export class LightweightToastRenderer {
   }
 
   private dismissElement(element: HTMLElement, force: boolean, immediate: boolean, close: boolean): void {
+    const native = this.adopted.get(element);
+    if (native) {
+      if (!force && document.activeElement && element.contains(document.activeElement)) return;
+      // 先解除归属，再调用宿主 remove，避免辅助方法守卫递归。
+      this.releaseAdopted(element);
+      try { native.dismiss(element); } catch (error) { this.onError(error); }
+      const container = element.parentElement;
+      element.remove();
+      this.removeEmptyContainer(container);
+      this.onStateChanged();
+      return;
+    }
     const pendingIndex = this.pending.findIndex(request => request.element === element);
     if (pendingIndex >= 0) {
       const [request] = this.pending.splice(pendingIndex, 1);
@@ -952,12 +976,13 @@ export class LightweightToastRenderer {
 
   private finishActive(state: ActiveToast): void {
     if (!this.active.delete(state.element)) return;
+    this.visibleOrder.delete(state.element);
     this.clearDismissTimer(state);
     state.progressAnimation?.cancel();
     const container = state.element.parentElement;
     state.element.removeAttribute(TOAST_ATTRIBUTE);
     state.element.remove();
-    if (container?.classList.contains(CONTAINER_CLASS) && container.childElementCount === 0) container.remove();
+    this.removeEmptyContainer(container);
     state.response.state = 'hidden';
     state.response.endTime = new Date();
     for (const callback of state.hiddenCallbacks) safelyCall(callback, this.onError);
@@ -965,12 +990,50 @@ export class LightweightToastRenderer {
     this.onStateChanged();
   }
 
+  private releaseAdopted(element: HTMLElement): void {
+    const native = this.adopted.get(element);
+    if (!native) return;
+    element.removeEventListener?.('click', native.click);
+    element.removeAttribute(ADOPTED_ATTRIBUTE);
+    this.adopted.delete(element);
+    this.visibleOrder.delete(element);
+  }
+
+  private removeEmptyContainer(container: HTMLElement | null): void {
+    if (!container?.classList.contains(CONTAINER_CLASS) || container.childElementCount !== 0) return;
+    container.remove();
+  }
+
+  /** 定向观察器及时回收原生计时器移除的节点；看门狗处理整个目标被卸载的情况。 */
+  pruneDetachedToasts(): void {
+    let changed = false;
+    for (const element of [...this.adopted.keys()]) {
+      if (element.isConnected) continue;
+      this.releaseAdopted(element);
+      changed = true;
+    }
+    for (const state of [...this.active.values()]) {
+      if (!state.element.isConnected) { this.finishActive(state); changed = true; }
+    }
+    let reconnect = false;
+    for (const container of this.observedContainers) {
+      this.removeEmptyContainer(container);
+      if (!container.isConnected) { this.observedContainers.delete(container); reconnect = true; }
+    }
+    if (reconnect) {
+      this.containerObserver?.disconnect();
+      for (const container of this.observedContainers) this.containerObserver?.observe(container, { childList: true });
+    }
+    if (changed) this.onStateChanged();
+  }
+
   private enforceVisibleLimit(): void {
-    while (this.active.size > this.maxVisible) {
-      const oldest = this.active.values().next().value as ActiveToast | undefined;
+    this.pruneDetachedToasts();
+    while (this.visibleOrder.size > this.maxVisible) {
+      const oldest = this.visibleOrder.values().next().value;
       if (!oldest) break;
       this.evicted += 1;
-      this.dismissElement(oldest.element, true, true, false);
+      this.dismissElement(oldest, true, true, false);
     }
   }
 

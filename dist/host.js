@@ -1,6 +1,6 @@
 import { resolveHostAdapter } from './host-adapter.js';
 import { createSelfCheckReport, copyReport } from './self-check.js';
-import { DIAGNOSTIC_OVERVIEW_HTML, paintDiagnosticView } from './diagnostics-view.js';
+import { PLUGIN_STATUS_HTML, DIAGNOSTIC_OVERVIEW_HTML, paintDiagnosticView } from './diagnostics-view.js';
 import { SETTINGS_KEY, TOAST_METHODS, getBlockedMethods, hasManagedCss, normalizeMaxVisible, normalizeSettings, updateManagedCss, } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
 import { createTimedConfirmation } from './interaction.js';
@@ -151,6 +151,10 @@ class ToastBlockerHost {
     }
     async setRedrawMaxVisible(value) {
         this.settings.redrawMaxVisible = normalizeMaxVisible(value);
+        // 显式提交时同步规范值；普通状态绘制则保留尚未提交的输入。
+        const input = this.panel?.querySelector(`#${APP_ID}-redraw-limit`);
+        if (input)
+            input.value = String(this.settings.redrawMaxVisible);
         this.adapter.extensionSettings[SETTINGS_KEY] = this.settings;
         this.applyRuntimeSettings();
         await this.forceSave();
@@ -319,7 +323,8 @@ class ToastBlockerHost {
         <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
       </div>
       <div class="inline-drawer-content">
-        <div class="qyh-toast-blocker-row">
+        ${PLUGIN_STATUS_HTML}
+        <div class="qyh-toast-blocker-row qyh-toast-blocker-enable-row">
           <div>
             <strong>启用分类屏蔽</strong>
             <div class="qyh-toast-blocker-help">所选类型同时使用早期 CSS、方法守卫和 DOM 清理。</div>
@@ -553,7 +558,9 @@ class ToastBlockerHost {
         if (diagnostics)
             diagnostics.checked = this.settings.diagnosticsEnabled;
         if (redrawLimit) {
-            redrawLimit.value = String(this.settings.redrawMaxVisible);
+            if (document.activeElement !== redrawLimit) {
+                redrawLimit.value = String(this.settings.redrawMaxVisible);
+            }
             redrawLimit.disabled = !this.settings.redrawEnabled;
         }
         this.panel.querySelectorAll('[data-toast-level]').forEach(input => {

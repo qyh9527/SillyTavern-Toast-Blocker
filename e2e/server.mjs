@@ -1,8 +1,9 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { relative, resolve, extname, sep } from 'node:path';
+import { relative, resolve, extname } from 'node:path';
 
 const root = process.cwd();
+const manifest = JSON.parse(await readFile(resolve(root, 'manifest.json'), 'utf8'));
 const legacy = {
   '/script.js': 'export const saveSettings = window.fixtureSave; export const saveSettingsDebounced = window.fixtureSave;',
   '/scripts/extensions.js': 'export const extension_settings = window.fixtureExtensionSettings;',
@@ -22,6 +23,8 @@ http.createServer(async (request, response) => {
     const bytes = await readFile(file);
     const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' }[extname(file)];
     response.writeHead(200, { 'Content-Type': type ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
-    response.end(bytes);
+    response.end(path === '/' || path === '/e2e/fixture.html'
+      ? bytes.toString().replace('__PLUGIN_CSS__', manifest.css).replace('__PLUGIN_JS__', manifest.js)
+      : bytes);
   } catch { response.writeHead(404); response.end(); }
 }).listen(4173, '127.0.0.1');

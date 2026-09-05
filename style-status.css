@@ -2,16 +2,13 @@
 
 /*
  * 小型状态头：使用普通文档流，不再 absolute 覆盖首张设置卡。
- * DOM 仍复用现有诊断 summary/tone；这里只调整排序与视觉，不增加运行时逻辑。
+ * 状态头直接位于 DOM 顶部，保留宿主对抽屉 display 与动画的控制。
  */
 #qyh-toast-blocker-panel .inline-drawer-content {
-  display: flex;
-  flex-direction: column;
   padding: 0.58rem;
 }
 
 #qyh-toast-blocker-panel .qyh-toast-plugin-status {
-  order: -1;
   display: flex;
   flex-direction: column;
   align-items: stretch;

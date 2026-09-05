@@ -1,6 +1,6 @@
 # SillyTavern Toast Blocker 开发文档
 
-> 文档对应版本：`1.4.2`（自动化验收通过，真机回测待补）
+> 文档对应版本：`1.4.3`（浏览器验收进行中，真机回测待补）
 > 修订日期：2026-09-05
 > 仓库：<https://github.com/qyh9527/SillyTavern-Toast-Blocker>
 > 运行环境：原生 SillyTavern、TauriTavern 及其系统 WebView
@@ -45,33 +45,21 @@ SillyTavern Toast Blocker 是一个 TypeScript 编写的纯前端扩展，用于
 
 ## 3. 项目结构
 
-```text
-SillyTavern-Toast-Blocker/
-├─ .github/workflows/test.yml   # GitHub Actions
-├─ src/
-│  ├─ index.ts                  # 扩展入口与生命周期导出
-│  ├─ host.ts                   # 设置持久化、操作面板、公开 API
-│  ├─ host-adapter.ts          # context 优先、缺失宿主 API 动态导入
-│  ├─ diagnostics-view.ts      # 可视化诊断模型、模板与增量文字更新
-│  ├─ self-check.ts            # 白名单自检报告、剪贴板降级
-│  ├─ version.ts               # 自检版本，与发布元数据一致
-│  ├─ core.ts                   # 配置模型、前置 CSS、toastr 方法守卫
-│  ├─ runtime.ts                # 屏蔽器与重绘器的运行时编排
-│  ├─ renderer.ts               # 异步 Toast 重绘器
-│  ├─ interaction.ts           # 二次确认状态机
-│  ├─ reload.ts                 # 单页去重刷新调度器
-│  └─ types/                    # SillyTavern 与全局对象类型声明
-├─ dist/                        # TypeScript 编译产物，发布必需
-├─ tests/                       # Node 自动化测试
-├─ e2e/                         # 浏览器夹具、静态服务和 10 个测试场景
-├─ playwright.config.mjs        # 4 个引擎/视口组合
-├─ scripts/check-release.mjs    # 版本与入口检查
-├─ docs/                        # 开发文档、未来更新建议
-├─ style.css                    # 面板、胶囊开关和重绘 Toast 样式
-├─ manifest.json                # SillyTavern 扩展清单
-├─ package.json
-└─ tsconfig.json
-```
+| 路径 | 职责 |
+| --- | --- |
+| `src/index.ts`、`host.ts` | 生命周期、设置持久化、操作面板与公开 API |
+| `src/host-adapter.ts`、`src/types/globals.d.ts` | 宿主动态适配与全局类型 |
+| `src/core.ts`、`runtime.ts`、`renderer.ts` | 配置、守卫、运行时编排与通知重绘 |
+| `src/diagnostics-view.ts`、`self-check.ts` | 诊断模型、展示模板与报告复制 |
+| `src/interaction.ts`、`reload.ts`、`version.ts` | 二次确认、刷新调度与版本常量 |
+| `dist/*.js`、`dist/*.js.map` | 自动生成的运行代码和调试映射，随发布提交 |
+| `style-status.css` → `style-compact.css` → `style.css` | 清单中的样式入口、紧凑皮肤与基础样式，三者均在使用 |
+| `tests/`、`e2e/`、`playwright.config.mjs` | 单元测试、12 个浏览器场景、4 个引擎/视口组合 |
+| `scripts/check-release.mjs`、`.github/workflows/test.yml` | 发布一致性与 CI |
+| `docs/`、`README.md` | 开发说明、路线图和用户说明 |
+| `manifest.json`、`package.json`、`package-lock.json`、`tsconfig.json` | 扩展清单与构建配置 |
+
+v1.4.3 清理了未被动态宿主适配层使用的三份静态声明及对应 `paths`，并关闭 `declaration`、移除 `dist/*.d.ts`：这是私有前端扩展，不向其他 TypeScript 包发布类型接口。源码类型检查照常执行；全局声明与 source map 保留。`node_modules/`、`playwright-report/`、`test-results/` 是已忽略的本地产物，不提交。
 
 ## 4. 总体架构
 
@@ -104,7 +92,7 @@ flowchart TD
 {
   "loading_order": -100000,
   "js": "dist/index.js",
-  "css": "style.css",
+  "css": "style-status.css",
   "version": "1.4.1",
   "auto_update": true,
   "minimum_client_version": "1.12.13"
@@ -464,6 +452,12 @@ WebView 和浏览器通常会限制后台页面定时器。重绘器监听标准
 
 作为作用域，降低与宿主主题或其他扩展冲突的概率。
 
+### 状态头、抽屉与编辑保护（v1.4.3）
+
+`PLUGIN_STATUS_HTML` 在主抽屉内容开头插入，`DIAGNOSTIC_OVERVIEW_HTML` 仍在维护按钮下方。不要用 `order: -1` 把底部 DOM 假装放到顶部，也不要给 `.inline-drawer-content` 强制设置 `display: flex`：宿主需要控制该元素的隐藏和展开动画。分类首行使用 `.qyh-toast-blocker-enable-row`，不依赖 `:first-child`。
+
+状态绘制跳过正在获得焦点的数值框，避免通知到达时抹掉尚未提交的输入；`setRedrawMaxVisible()` 在用户提交后规范化数值、更新界面并保存。
+
 ### 15.1 胶囊开关
 
 面板内 checkbox 使用原生 `<input type="checkbox">` 保留键盘和无障碍语义，但通过高特异性 CSS 重绘成胶囊：
@@ -674,21 +668,19 @@ npm run test:e2e
 | `e2e/plugin.spec.mjs` | 实际 jQuery/Toastr 加载的浏览器交互测试 |
 | `style.test.mjs` | 移动端 2×2 布局、选中态、胶囊开关和无勾号回归 |
 
-本轮验证记录（2026-09-05，v1.4.2 重验）：
+本轮验证记录（2026-09-05，v1.4.3）：
 
-| 验证项 | 结果 |
+| 检查 | 状态 |
 | --- | --- |
-| `npm test` | 48/48 通过；v1.4.1 基线 46 项 |
-| `npm run check` | 通过 |
-| `npm run check:release` | 通过；manifest/package/lock 根记录/编译版本一致（1.4.2） |
-| `git diff --check` | 通过 |
-| `npm run check:dist` | 本地提交后与远端 CI 均通过 |
-| Playwright E2E | 本地 40/40 通过（Chromium/WebKit × 桌面/移动视口）；远端 CI 待推送后回填 |
-| 真实 ST/TT 与平台设备 | 未执行；不能据此声明全平台验证通过 |
+| 类型检查、Node 单元测试 | 本地通过，55/55 项单测 |
+| 版本与入口一致性 | 目标版本 1.4.3，提交前执行检查 |
+| 编译产物同步 | 提交后重建，检查 `dist` 无差异 |
+| 浏览器测试 | 12 个场景 × 4 组合，等待远端 CI 验收 |
+| 真机 ST/TT | 待设备回测，浏览器模拟不替代真机 |
 
-E2E 使用最小宿主夹具、实际 jQuery 3.7.1 和 Toastr 2.1.4；不是完整酒馆启动，也不是 TT 容器真机。
+失败基线：[工作流 33963824979](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33963824979)，提交 `914cd72`：55 项单测通过，E2E 38/40，两项移动布局失败。此前夹具硬编码加载 `style.css`，与 manifest 中的 `style-status.css` 不一致，因此旧版通过记录不能验证后续状态头样式。
 
-v1.4.2 本地验证：48 项单测与 40 项浏览器用例通过。本轮同时修复本地 `e2e/server.mjs` 在 Windows 上因 `path.resolve` 反斜杠与 `/` 前缀检查不匹配导致全部请求 403 的问题（远端 Linux CI 不受影响，属本地开发环境缺陷）；越界访问拦截改用 `path.relative` 判断，并验证 `..%2f` 穿越仍被拒绝。
+v1.4.3 的服务器按 `manifest.json` 注入 CSS/JS 入口；新增初始折叠、反复展开后顶部位置、正在编辑的数字不被通知刷新覆盖的回归。本地浏览器下载超时，完整跨引擎验收交由 GitHub Actions 执行，完成后回填结果。
 
 v1.4.1 验证证据：[GitHub Actions #17](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33951559152)，运行时代码提交 `9e232aae2add8c99816cbd5f0da63f67805587ff`，46 项单测与 40 项浏览器用例均通过。
 
@@ -706,7 +698,7 @@ npx playwright install --with-deps chromium webkit
 npm run test:e2e
 ```
 
-E2E 当前覆盖：屏蔽/聚合/恢复原生、启动通知上限与按钮/移除、容器延迟出现与重建、移动布局/键盘/手动复制、3 种宿主适配、二次确认刷新后的持久化。v1.4.1 新增宿主强制显示 textarea 的隐藏回归、复制成功不残留空框、用户报告数值的可视化与清零联动。v1.4.2 新增概览默认折叠、诊断开关自动展开/收回、合并计数展示回归。后台可见性计时仍以可控时钟单测覆盖，需要真机补验。
+E2E 当前覆盖：屏蔽/聚合/恢复原生、启动通知上限与按钮/移除、容器延迟出现与重建、移动布局/键盘/手动复制、3 种宿主适配、二次确认刷新后的持久化。v1.4.1 新增宿主强制显示 textarea 的隐藏回归、复制成功不残留空框、用户报告数值的可视化与清零联动。v1.4.2 新增概览默认折叠、诊断开关自动展开/收回、合并计数展示回归；v1.4.3 新增真实发布样式、主抽屉反复折叠和数字输入保护回归。后台可见性计时仍以可控时钟单测覆盖，需要真机补验。
 
 ## 23. 手动验证清单
 
@@ -781,7 +773,7 @@ git diff --check
 ### 25.2 提交示例
 
 ```bash
-git add README.md manifest.json package.json package-lock.json style.css src dist tests e2e scripts docs playwright.config.mjs .github .gitignore
+git add README.md manifest.json package.json package-lock.json style.css style-compact.css style-status.css tsconfig.json src dist tests e2e scripts docs playwright.config.mjs .github .gitignore
 git commit -m "feat: describe the release"
 git push origin main
 ```
@@ -825,7 +817,7 @@ git push origin main
 
 ### 26.4 开关再次出现勾号或变形
 
-- 确认 `style.css` 已更新到当前版本。
+- 确认 `style-status.css`、`style-compact.css` 和 `style.css` 均已更新到当前版本。
 - 检查主题是否使用了更高优先级的内联样式。
 - 保留面板 ID 作用域和 `!important` 清除规则。
 - 不要重新在 checkbox 的伪元素中放入 `✓` 字符。
@@ -859,4 +851,4 @@ git push origin main
 
 ---
 
-后续若项目版本、验证状态或设置结构变化，应同步更新文档顶部状态和相关章节。v1.4.1 与 v1.4.2 均没有新增持久设置字段，schemaVersion 保持 4。
+后续若项目版本、验证状态或设置结构变化，应同步更新文档顶部状态和相关章节。v1.4.1 至 v1.4.3 均没有新增持久设置字段，schemaVersion 保持 4。

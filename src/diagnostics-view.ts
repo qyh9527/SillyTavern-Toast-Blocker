@@ -45,14 +45,16 @@ export function buildDiagnosticView(status: DiagnosticStatus, source: string) {
   };
 }
 
-export const DIAGNOSTIC_OVERVIEW_HTML = `
+export const PLUGIN_STATUS_HTML = `
   <section class="qyh-toast-plugin-status" aria-label="插件状态">
     <div class="qyh-toast-plugin-status__identity">
       <strong>Toast 屏蔽与重绘器</strong>
       <span class="qyh-toast-plugin-version">v${VERSION}</span>
     </div>
     <span data-health="summary" class="qyh-toast-health-badge qyh-toast-plugin-health"></span>
-  </section>
+  </section>`;
+
+export const DIAGNOSTIC_OVERVIEW_HTML = `
   <section class="qyh-toast-overview" aria-label="可视化诊断概览">
     <button class="qyh-toast-overview-toggle" type="button" aria-expanded="false" aria-controls="qyh-toast-overview-body">
       <strong>诊断概览</strong>

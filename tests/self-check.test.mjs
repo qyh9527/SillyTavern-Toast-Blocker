@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { VERSION } from '../dist/version.js';
 import { createSelfCheckReport, copyReport } from '../dist/self-check.js';
 
 test('self-check excludes private fields and explains missing guards and early CSS', () => {
@@ -12,7 +13,7 @@ test('self-check excludes private fields and explains missing guards and early C
   assert.equal(parsed.runtime.rendered, 2);
   assert.ok(parsed.findings.some(line => line.includes('早期规则缺失')));
   assert.ok(parsed.findings.some(line => line.includes('方法守卫')));
-  assert.equal(parsed.version, '1.4.2');
+  assert.equal(parsed.version, VERSION);
 });
 
 test('clipboard unavailable or denied returns false for manual selection', async () => {

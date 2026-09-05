@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { VERSION } from '../dist/version.js';
 
 async function ready(page, query = '') {
   await page.goto(`/${query}`);
@@ -67,7 +68,7 @@ test('移动布局、键盘开关与剪贴板失败时手动复制', async ({ pa
   const output = page.locator('#qyh-toast-blocker-report');
   await expect(output).toBeVisible();
   const report = JSON.parse(await output.inputValue());
-  expect(report.version).toBe('1.4.2');
+  expect(report.version).toBe(VERSION);
   expect(report.settings.blockedLevels.info).toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (page.viewportSize().width < 600) {
@@ -123,7 +124,7 @@ test('宿主强制显示文本框时仍无空白框，复制成功后收起且�
   await page.locator('.qyh-toast-overview-toggle').click();
   await expect(page.locator('[data-health="batch"]')).toHaveText('暂无批次样本');
   await page.locator('#qyh-toast-blocker-self-check').click();
-  await expect.poll(() => page.evaluate(() => JSON.parse(window.copiedReport).version)).toBe('1.4.2');
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.copiedReport).version)).toBe(VERSION);
   await expect(report).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -175,4 +176,44 @@ test('实机数据可视化区分页面长帧与无重绘样本，清零后同�
   await expect(overviewToggle).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('[data-health="batch"]')).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+
+test('真实发布样式下抽屉默认折叠，反复展开后状态头仍位于首行上方', async ({ page }) => {
+  await ready(page);
+  const content = page.locator('#qyh-toast-blocker-panel > .inline-drawer-content');
+  const toggle = page.locator('#qyh-toast-blocker-panel > .inline-drawer-toggle');
+  await expect(content).toBeHidden();
+  for (let i = 0; i < 2; i++) {
+    await toggle.click();
+    await expect(content).toBeVisible();
+    const geometry = await content.evaluate(node => {
+      const header = node.querySelector('.qyh-toast-plugin-status').getBoundingClientRect();
+      const firstRow = node.querySelector('.qyh-toast-blocker-row').getBoundingClientRect();
+      return { headerBottom: header.bottom, firstRowTop: firstRow.top };
+    });
+    expect(geometry.headerBottom).toBeLessThanOrEqual(geometry.firstRowTop + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await toggle.click();
+    await expect(content).toBeHidden();
+  }
+});
+
+test('通知刷新状态时保留正在编辑的显示上限，提交后规范化并保存', async ({ page }) => {
+  await ready(page);
+  await page.locator('.inline-drawer-toggle').click();
+  await page.evaluate(() => ToastBlocker.redraw(true));
+  const limit = page.locator('#qyh-toast-blocker-redraw-limit');
+  await limit.focus();
+  await limit.fill('12');
+  // 触发真实拦截与状态绘制，不能把尚未失焦的输入重置成旧设置。
+  await page.evaluate(async () => {
+    toastr.info('编辑中拦截');
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await expect(limit).toHaveValue('12');
+  await limit.fill('99');
+  await limit.press('Tab');
+  await expect(limit).toHaveValue('20');
+  await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('fixture-settings')).qyh_toast_blocker.redrawMaxVisible)).toBe(20);
 });

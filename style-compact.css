@@ -20,7 +20,7 @@
 }
 
 /* 分类屏蔽：标题行 + 2x2 类型卡片视觉上合并成一张卡。 */
-#qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-row:first-child {
+#qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-enable-row {
   padding: 0.5rem 0.58rem 0.38rem;
   border: 1px solid var(--qyh-ui-border);
   border-bottom: 0;
@@ -28,7 +28,7 @@
   background: var(--qyh-ui-surface);
 }
 
-#qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-row:first-child + .qyh-toast-blocker-levels {
+#qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-enable-row + .qyh-toast-blocker-levels {
   gap: 0.38rem;
   margin: 0;
   padding: 0 0.5rem 0.5rem;
@@ -280,12 +280,12 @@
     display: none;
   }
 
-  #qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-row:first-child,
+  #qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-enable-row,
   #qyh-toast-blocker-panel .qyh-toast-blocker-redraw-row {
     padding: 0.4rem 0.46rem 0.3rem;
   }
 
-  #qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-row:first-child + .qyh-toast-blocker-levels {
+  #qyh-toast-blocker-panel .inline-drawer-content > .qyh-toast-blocker-enable-row + .qyh-toast-blocker-levels {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.32rem;
     padding: 0 0.4rem 0.4rem;

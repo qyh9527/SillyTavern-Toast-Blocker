@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Toast 插件回归测试</title>
 <link rel="stylesheet" href="/node_modules/toastr/build/toastr.min.css">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/__PLUGIN_CSS__">
 <style>
   body { margin: 12px; background: #242830; color: #e5e8ed; font: 15px sans-serif; }
   #extensions_settings2 { max-width: 560px; }
@@ -45,5 +45,5 @@
   $('.native-link').on('click', () => window.linkClicks++);
   $(document).on('click', '.inline-drawer-toggle', function () { $(this).next().toggle(); });
 </script>
-<script type="module">window.fixtureModule = await import('/dist/index.js'); window.fixtureReady = true;</script>
+<script type="module">window.fixtureModule = await import('/__PLUGIN_JS__'); window.fixtureReady = true;</script>
 </html>

@@ -443,6 +443,7 @@ export class LightweightToastRenderer {
   }
 
   resetDiagnostics(): void {
+    this.performanceObserver?.takeRecords?.();
     this.rendered = 0;
     this.evicted = 0;
     this.fallbacks = 0;
@@ -887,8 +888,12 @@ export class LightweightToastRenderer {
   }
 
   private configurePerformanceObserver(): void {
-    this.stopPerformanceObserver();
-    if (!this.diagnosticsEnabled || typeof globalThis.PerformanceObserver !== 'function') return;
+    if (!this.diagnosticsEnabled || typeof globalThis.PerformanceObserver !== 'function') {
+      this.stopPerformanceObserver();
+      return;
+    }
+    // 同一采集会话的普通配置变动不重建观察器，避免历史条目反复统计。
+    if (this.performanceObserver) return;
     const supported = globalThis.PerformanceObserver.supportedEntryTypes ?? [];
     const type = supported.includes('long-animation-frame')
       ? 'long-animation-frame'
@@ -898,14 +903,16 @@ export class LightweightToastRenderer {
     if (!type) return;
     try {
       this.observerType = type;
-      this.performanceObserver = new globalThis.PerformanceObserver(list => {
+      const observer = new globalThis.PerformanceObserver(list => {
+        if (this.performanceObserver !== observer) return;
         for (const entry of list.getEntries()) {
           this.observedLongFrames += 1;
           this.maxObservedLongFrameMs = Math.max(this.maxObservedLongFrameMs, entry.duration);
         }
         this.onStateChanged();
       });
-      this.performanceObserver.observe({ type, buffered: true });
+      this.performanceObserver = observer;
+      observer.observe({ type, buffered: false });
     } catch {
       this.stopPerformanceObserver();
     }

@@ -1,6 +1,6 @@
 # SillyTavern Toast Blocker 开发文档
 
-> 文档对应版本：`1.4.0`（自动化验收通过，真机验收待补）
+> 文档对应版本：`1.4.1`（单测通过，浏览器回归结果待更新）
 > 修订日期：2026-09-05
 > 仓库：<https://github.com/qyh9527/SillyTavern-Toast-Blocker>
 > 运行环境：原生 SillyTavern、TauriTavern 及其系统 WebView
@@ -52,6 +52,7 @@ SillyTavern-Toast-Blocker/
 │  ├─ index.ts                  # 扩展入口与生命周期导出
 │  ├─ host.ts                   # 设置持久化、操作面板、公开 API
 │  ├─ host-adapter.ts          # context 优先、缺失宿主 API 动态导入
+│  ├─ diagnostics-view.ts      # 可视化诊断模型、模板与增量文字更新
 │  ├─ self-check.ts            # 白名单自检报告、剪贴板降级
 │  ├─ version.ts               # 自检版本，与发布元数据一致
 │  ├─ core.ts                   # 配置模型、前置 CSS、toastr 方法守卫
@@ -62,7 +63,7 @@ SillyTavern-Toast-Blocker/
 │  └─ types/                    # SillyTavern 与全局对象类型声明
 ├─ dist/                        # TypeScript 编译产物，发布必需
 ├─ tests/                       # Node 自动化测试
-├─ e2e/                         # 浏览器夹具、静态服务和 8 个测试场景
+├─ e2e/                         # 浏览器夹具、静态服务和 10 个测试场景
 ├─ playwright.config.mjs        # 4 个引擎/视口组合
 ├─ scripts/check-release.mjs    # 版本与入口检查
 ├─ docs/                        # 开发文档、未来更新建议
@@ -104,7 +105,7 @@ flowchart TD
   "loading_order": -100000,
   "js": "dist/index.js",
   "css": "style.css",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "auto_update": true,
   "minimum_client_version": "1.12.13"
 }
@@ -418,6 +419,20 @@ WebView 和浏览器通常会限制后台页面定时器。重绘器监听标准
 
 先调用标准 `navigator.clipboard.writeText()`；不可用或拒绝时，在面板显示只读文本框并选中文本，由用户手动复制，不反复请求权限、不自动上传。
 
+### 14.2 v1.4.1 可视化诊断与空白框修复
+
+用户在真机观察到的空白块是隐藏失败的备用报告 textarea。宿主 `textarea { display: block }` 能覆盖浏览器默认的隐藏样式；本版添加 `#qyh-toast-blocker-panel [hidden] { display: none !important; }`，只影响本插件面板。报告框仅在复制失败时展开，限制高度；复制成功后收起。[MDN：hidden 与 display](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/hidden)
+
+原区域新增 `diagnostics-view.ts` 提供的诊断概览，旧诊断数字也移至该区域。概览显示规则存在性、方法守卫数量、宿主适配、当前通知、待显示队列、重绘批次和页面长帧。健康标识由规则与守卫等检查项决定，不能因为整页有长帧就判断插件故障。`mixed` 表示公开接口和兼容导入混用，是正常模式。
+
+`frameSamples === 0` 时显示“暂无批次样本”，进度条为空；有样本后，条形只把平均批次耗时与约 16.7 ms 参考预算比较，不表示 CPU 占用、FPS 或整个插件耗时。启动接管的通知或启用诊断前的通知可以增加已重绘数量而没有批次样本。
+
+页面长帧卡片明确标注包含酒馆、主题和其他扩展，不能归因于本插件。报告新增 `observerType`、`timingSampleState`、`pageTimingScope`、`pageTimingCollection`，`reportSchema` 升为 2。旧数字字段保留；持久设置 `schemaVersion` 仍为 4。
+
+性能观察器使用 `buffered: false`，不回填采集前的历史；相同采集会话中的配置变化复用观察器。清零先调用 `takeRecords()` 丢弃待处理条目，停用后的过时回调不再增加统计。本页计数累计启用期间的新条目，刷新或清零后重置。[MDN：PerformanceObserver.observe](https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver/observe)
+
+概览与数字沿用已有 rAF 合批，没有新增周期轮询；抽屉关闭时跳过写回。
+
 ## 15. 操作面板与样式隔离
 
 控制面板挂载到：
@@ -639,6 +654,7 @@ npm run test:e2e
 | `interaction.test.mjs` | 二次确认与超时取消 |
 | `reload.test.mjs` | 刷新延迟和单页去重 |
 | `manifest.test.mjs` | 加载顺序、hooks、版本同步 |
+| `diagnostics-view.test.mjs` | 实机数据语义、页面长帧不归因、空样本和故障提示 |
 | `host-adapter.test.mjs` | context/混合/旧宿主路径、真实保存屏障和失效处理 |
 | `self-check.test.mjs` | 敏感字段排除、异常提示和剪贴板降级 |
 | `e2e/plugin.spec.mjs` | 实际 jQuery/Toastr 加载的浏览器交互测试 |
@@ -648,17 +664,17 @@ npm run test:e2e
 
 | 验证项 | 结果 |
 | --- | --- |
-| `npm test` | 42/42 通过；v1.3.1 基线 32 项 |
+| `npm test` | 46/46 通过；v1.4.0 基线 42 项 |
 | `npm run check` | 通过 |
 | `npm run check:release` | 通过；manifest/package/lock 根记录/编译版本一致 |
 | `git diff --check` | 通过 |
 | `npm run check:dist` | 本地提交后与远端 CI 均通过 |
-| Playwright E2E | 远端 CI 32/32 通过，耗时 20.5 秒，无失败、跳过或重试；Chromium/WebKit × 桌面/移动视口 |
+| Playwright E2E | v1.4.1 配置 10 个场景 × 4 个项目（40 个组合），待本轮 CI 验证；v1.4.0 的 32 项通过不能替代本轮回归 |
 | 真实 ST/TT 与平台设备 | 未执行；不能据此声明全平台验证通过 |
 
 E2E 使用最小宿主夹具、实际 jQuery 3.7.1 和 Toastr 2.1.4；不是完整酒馆启动，也不是 TT 容器真机。
 
-验证证据：[GitHub Actions #12](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33950757088)，测试代码提交 `2c1f11458b9a81bfcb286eb97a4faaaf330cf468`。本地 Node.js 24.19.0 完成单测与构建，CI 使用 Node.js 22。本地因缺少浏览器可执行文件未进入 E2E 页面断言，随后远端 CI 安装浏览器成功并完成全部用例。
+v1.4.0 历史验证证据：[GitHub Actions #12](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33950757088)，测试代码提交 `2c1f11458b9a81bfcb286eb97a4faaaf330cf468`。本地 Node.js 24.19.0 完成单测与构建，CI 使用 Node.js 22。本地因缺少浏览器可执行文件未进入 E2E 页面断言，随后远端 CI 安装浏览器成功并完成全部用例。
 
 GitHub Actions 在每次 `push` 和 `pull_request` 时执行：
 
@@ -672,7 +688,7 @@ npx playwright install --with-deps chromium webkit
 npm run test:e2e
 ```
 
-E2E 当前覆盖：屏蔽/聚合/恢复原生、启动通知上限与按钮/移除、容器延迟出现与重建、移动布局/键盘/手动复制、3 种宿主适配、二次确认刷新后的持久化。后台可见性计时仍以可控时钟单测覆盖，需要真机补验。
+E2E 当前覆盖：屏蔽/聚合/恢复原生、启动通知上限与按钮/移除、容器延迟出现与重建、移动布局/键盘/手动复制、3 种宿主适配、二次确认刷新后的持久化。v1.4.1 新增宿主强制显示 textarea 的隐藏回归、复制成功不残留空框、用户报告数值的可视化与清零联动。后台可见性计时仍以可控时钟单测覆盖，需要真机补验。
 
 ## 23. 手动验证清单
 
@@ -696,6 +712,8 @@ E2E 当前覆盖：屏蔽/聚合/恢复原生、启动通知上限与按钮/移�
 16. 自检按钮在剪贴板可用时成功复制；拒绝时可从只读框手动复制。
 17. 启动通知超过上限时旧通知被移除，按钮仍能执行操作，停用后无残余重绘容器。
 18. 原生启动通知自然消失后 `adoptedActive` 归零；不要将其计时当作插件可冻结的计时。
+
+19. 在真实宿主中确认没有空白报告框，概览未采样时不是 0 ms，整页长帧不被标为插件故障。
 
 ## 24. 新增设置项的标准步骤
 
@@ -823,4 +841,4 @@ git push origin main
 
 ---
 
-后续若项目版本、验证状态或设置结构变化，应同步更新文档顶部状态和相关章节。v1.4.0 没有新增持久设置字段，schemaVersion 保持 4。
+后续若项目版本、验证状态或设置结构变化，应同步更新文档顶部状态和相关章节。v1.4.1 没有新增持久设置字段，schemaVersion 保持 4。

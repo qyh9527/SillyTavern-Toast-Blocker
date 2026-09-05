@@ -536,3 +536,36 @@ test('empty startup adoption creates no persistent container', () => {
     assert.equal(browser.body.children.length, 0);
   } finally { renderer.stop(); browser.restore(); }
 });
+
+test('performance sampling reuses observers, excludes buffered history and drains reset queues', () => {
+  const instances = [];
+  let drained = 0;
+  class FakePerformanceObserver {
+    static supportedEntryTypes = ['long-animation-frame'];
+    constructor(callback) { this.callback = callback; instances.push(this); }
+    observe(options) { this.options = options; }
+    disconnect() {}
+    takeRecords() { drained++; return [{ duration: 300 }]; }
+    emit(entries) { this.callback({ getEntries: () => entries }); }
+  }
+  const browser = installFakeBrowser({ performanceObserver: FakePerformanceObserver });
+  const renderer = new LightweightToastRenderer();
+  try {
+    renderer.configure(true, 6, { diagnosticsEnabled: true });
+    const first = instances[0];
+    assert.equal(first.options.buffered, false);
+    first.emit([{ duration: 72 }]);
+    renderer.configure(true, 4, { diagnosticsEnabled: true, aggregateDuplicates: false });
+    assert.equal(instances.length, 1);
+    assert.equal(renderer.getStats().observedLongFrames, 1);
+    renderer.resetDiagnostics();
+    assert.equal(drained, 1); assert.equal(renderer.getStats().observedLongFrames, 0);
+    renderer.configure(true, 4, { diagnosticsEnabled: false });
+    first.emit([{ duration: 900 }]);
+    assert.equal(renderer.getStats().observedLongFrames, 0);
+    renderer.configure(true, 4, { diagnosticsEnabled: true });
+    assert.equal(instances.length, 2); assert.equal(instances[1].options.buffered, false);
+    instances[1].emit([{ duration: 80 }]);
+    assert.equal(renderer.getStats().observedLongFrames, 1);
+  } finally { renderer.stop(); browser.restore(); }
+});

@@ -576,7 +576,7 @@ class ToastBlockerHost {
   toggleOverview(button: HTMLButtonElement | null = null): void {
     this.overviewManuallyToggled = true;
     const target = button ?? this.panel?.querySelector<HTMLButtonElement>('.qyh-toast-overview-toggle') ?? null;
-    this.setOverviewCollapsed(target, this.isOverviewCollapsed());
+    this.setOverviewCollapsed(target, !this.isOverviewCollapsed());
   }
 
   private isOverviewCollapsed(): boolean {

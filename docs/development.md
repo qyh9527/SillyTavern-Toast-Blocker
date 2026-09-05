@@ -1,8 +1,8 @@
 # SillyTavern Toast Blocker 开发文档
 
-> 文档对应版本：`1.4.0`（更新分支候选，尚未宣称正式发布）
-> 修订日期：2026-09-05  
-> 仓库：<https://github.com/qyh9527/SillyTavern-Toast-Blocker>  
+> 文档对应版本：`1.4.0`（自动化验收通过，真机验收待补）
+> 修订日期：2026-09-05
+> 仓库：<https://github.com/qyh9527/SillyTavern-Toast-Blocker>
 > 运行环境：原生 SillyTavern、TauriTavern 及其系统 WebView
 
 ## 1. 项目定位
@@ -652,12 +652,13 @@ npm run test:e2e
 | `npm run check` | 通过 |
 | `npm run check:release` | 通过；manifest/package/lock 根记录/编译版本一致 |
 | `git diff --check` | 通过 |
-| Playwright E2E | 已配置 8 个场景 × 4 个项目；本地执行全部停在浏览器启动阶段，缺少浏览器可执行文件，未进入页面断言 |
+| `npm run check:dist` | 本地提交后与远端 CI 均通过 |
+| Playwright E2E | 远端 CI 32/32 通过，耗时 20.5 秒，无失败、跳过或重试；Chromium/WebKit × 桌面/移动视口 |
 | 真实 ST/TT 与平台设备 | 未执行；不能据此声明全平台验证通过 |
 
 E2E 使用最小宿主夹具、实际 jQuery 3.7.1 和 Toastr 2.1.4；不是完整酒馆启动，也不是 TT 容器真机。
 
-本次浏览器安装结果读取曾被自动审批以额度限制拒绝；未把失败计为业务用例通过。正式发布前仍需在具备浏览器依赖的环境跑通 E2E。
+验证证据：[GitHub Actions #12](https://github.com/qyh9527/SillyTavern-Toast-Blocker/actions/runs/33950757088)，测试代码提交 `2c1f11458b9a81bfcb286eb97a4faaaf330cf468`。本地 Node.js 24.19.0 完成单测与构建，CI 使用 Node.js 22。本地因缺少浏览器可执行文件未进入 E2E 页面断言，随后远端 CI 安装浏览器成功并完成全部用例。
 
 GitHub Actions 在每次 `push` 和 `pull_request` 时执行：
 
@@ -749,7 +750,7 @@ git commit -m "feat: describe the release"
 git push origin main
 ```
 
-提交候选分支后执行 `npm run check:dist`，重新构建不应改变已提交的 dist。E2E 或真实更新流程未验收前不将“候选”改为“已发布”。
+提交候选分支后执行 `npm run check:dist`，重新构建不应改变已提交的 dist。自动化检查通过后才能合入发布分支；真实 ST/TT 更新与平台设备验收单独记录，未经真机验证不得宣称全平台实测通过。
 
 ### 25.3 发布后
 

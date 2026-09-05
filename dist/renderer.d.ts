@@ -59,6 +59,7 @@ export declare class LightweightToastRenderer {
     private maxObservedLongFrameMs;
     private performanceObserver;
     private observerType;
+    private longFrameNotifyTimer;
     private visibilityTracking;
     private readonly onError;
     private readonly onRendered;
@@ -107,6 +108,8 @@ export declare class LightweightToastRenderer {
     private isDocumentHidden;
     private syncVisibilityTimers;
     private configurePerformanceObserver;
+    /** 突发的上百条长帧在冷却窗口内只触发一次 UI 更新；计数本身每条都入账。 */
+    private scheduleLongFrameNotify;
     private stopPerformanceObserver;
     private now;
     private dismissElement;

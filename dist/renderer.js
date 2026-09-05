@@ -6,6 +6,8 @@ const MAX_PER_FRAME = 12;
 const MAX_PENDING = 100;
 const DUPLICATE_WINDOW_MS = 1000;
 const FRAME_BUDGET_MS = 1000 / 60;
+/** 页面长帧可能上百条连续到达：计数即时累计，界面提醒每秒至多一次，让诊断自身不放大卡顿。 */
+const LONG_FRAME_NOTIFY_MS = 1000;
 const DEFAULT_OPTIONS = {
     tapToDismiss: true,
     toastClass: 'toast',
@@ -106,6 +108,7 @@ export class LightweightToastRenderer {
     maxObservedLongFrameMs = 0;
     performanceObserver = null;
     observerType = null;
+    longFrameNotifyTimer = null;
     visibilityTracking = false;
     onError;
     onRendered;
@@ -308,6 +311,10 @@ export class LightweightToastRenderer {
     }
     resetDiagnostics() {
         this.performanceObserver?.takeRecords?.();
+        if (this.longFrameNotifyTimer) {
+            clearTimeout(this.longFrameNotifyTimer);
+            this.longFrameNotifyTimer = null;
+        }
         this.rendered = 0;
         this.evicted = 0;
         this.fallbacks = 0;
@@ -767,7 +774,7 @@ export class LightweightToastRenderer {
                     this.observedLongFrames += 1;
                     this.maxObservedLongFrameMs = Math.max(this.maxObservedLongFrameMs, entry.duration);
                 }
-                this.onStateChanged();
+                this.scheduleLongFrameNotify();
             });
             this.performanceObserver = observer;
             observer.observe({ type, buffered: false });
@@ -776,10 +783,23 @@ export class LightweightToastRenderer {
             this.stopPerformanceObserver();
         }
     }
+    /** 突发的上百条长帧在冷却窗口内只触发一次 UI 更新；计数本身每条都入账。 */
+    scheduleLongFrameNotify() {
+        if (this.longFrameNotifyTimer)
+            return;
+        this.longFrameNotifyTimer = setTimeout(() => {
+            this.longFrameNotifyTimer = null;
+            this.onStateChanged();
+        }, LONG_FRAME_NOTIFY_MS);
+    }
     stopPerformanceObserver() {
         this.performanceObserver?.disconnect();
         this.performanceObserver = null;
         this.observerType = null;
+        if (this.longFrameNotifyTimer) {
+            clearTimeout(this.longFrameNotifyTimer);
+            this.longFrameNotifyTimer = null;
+        }
     }
     now() {
         return typeof globalThis.performance?.now === 'function' ? globalThis.performance.now() : Date.now();

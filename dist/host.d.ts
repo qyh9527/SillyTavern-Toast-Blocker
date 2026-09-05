@@ -25,6 +25,8 @@ declare class ToastBlockerHost {
     refreshConfirmation: TimedConfirmation;
     statusRenderScheduled: boolean;
     statusRenderTimer: ReturnType<typeof setTimeout> | null;
+    /** 概览手动展开标记：诊断开关切换时只在用户未曾手动干预时自动展开/收起。 */
+    overviewManuallyToggled: boolean;
     constructor(adapter: HostAdapter);
     activate({ forceSave }?: {
         forceSave?: boolean;
@@ -57,6 +59,12 @@ declare class ToastBlockerHost {
     renderStatus(): void;
     /** 抽屉合上时跳过概览与诊断数字写回；不增加独立轮询。 */
     private isPanelContentVisible;
+    /** 概览默认折叠；打开本地性能诊断自动展开，关闭自动收回。 */
+    toggleOverview(button?: HTMLButtonElement | null): void;
+    private isOverviewCollapsed;
+    private setOverviewCollapsed;
+    /** 诊断状态变化时自动展开/收回；用户手动切换过后，后续开关切换不再覆盖用户选择。 */
+    private syncOverviewCollapse;
     private paintStatusNow;
     getPublicStatus(): PublicStatus;
 }

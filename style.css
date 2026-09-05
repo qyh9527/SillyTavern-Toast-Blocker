@@ -285,55 +285,6 @@
   color: var(--grey70, #aaa);
 }
 
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics {
-  margin: 0.7rem 0;
-  padding: 0.65rem;
-  border: 1px solid rgb(112 100 216 / 42%);
-  border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 42%, transparent);
-  border-radius: 0.55rem;
-  background: rgb(112 100 216 / 7%);
-  background: color-mix(in srgb, var(--SmartThemeQuoteColor) 7%, transparent);
-}
-
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics[hidden] {
-  display: none;
-}
-
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.4rem;
-}
-
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics-grid > div {
-  display: flex;
-  min-width: 0;
-  min-height: 3.1rem;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0.4rem;
-  border-radius: 0.4rem;
-  background: rgb(0 0 0 / 12%);
-  text-align: center;
-}
-
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics-grid small {
-  color: var(--grey70, #aaa);
-  line-height: 1.2;
-}
-
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics-grid strong {
-  overflow: hidden;
-  margin-top: 0.15rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-#qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics .menu_button {
-  width: 100%;
-  margin-top: 0.55rem;
-}
-
 #qyh-toast-blocker-panel .qyh-toast-blocker-status {
   margin: 0.75rem 0;
   padding: 0.6rem 0.75rem;
@@ -431,10 +382,6 @@
   #qyh-toast-blocker-panel .qyh-toast-blocker-level-actions {
     grid-column: 1 / -1;
     gap: 0.4rem;
-  }
-
-  #qyh-toast-blocker-panel .qyh-toast-blocker-diagnostics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -665,20 +612,51 @@
 
 #qyh-toast-blocker-panel .qyh-toast-overview {
   margin: 0.8rem 0;
-  padding: 0.8rem;
+  padding: 0.55rem 0.8rem 0.8rem;
   border: 1px solid rgb(100 175 213 / 40%);
   border-radius: 0.65rem;
   background: rgb(50 120 160 / 8%);
   overflow-wrap: anywhere;
 }
 
-#qyh-toast-blocker-panel .qyh-toast-overview-header {
+#qyh-toast-blocker-panel .qyh-toast-overview-toggle {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  width: 100%;
+  padding: 0.2rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-toggle strong {
+  flex: 1 1 auto;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-toggle > i {
+  flex: 0 0 auto;
+  color: var(--grey70, #8d93a5);
+  transition: transform 140ms ease;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-toggle[aria-expanded="true"] > i {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #qyh-toast-blocker-panel .qyh-toast-overview-toggle > i {
+    transition-duration: 1ms;
+  }
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-body {
+  margin-top: 0.75rem;
 }
 
 #qyh-toast-blocker-panel .qyh-toast-health-badge {
@@ -749,6 +727,12 @@
   margin: 0;
   font-size: 0.85em;
   line-height: 1.5;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-grid .menu_button {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 0.2rem;
 }
 
 #qyh-toast-blocker-panel .qyh-toast-budget {

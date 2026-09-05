@@ -537,6 +537,41 @@ test('empty startup adoption creates no persistent container', () => {
   } finally { renderer.stop(); browser.restore(); }
 });
 
+test('long frame bursts throttle state notifications to one per cooling window', async () => {
+  let instance;
+  class FakePerformanceObserver {
+    static supportedEntryTypes = ['long-animation-frame'];
+    constructor(callback) {
+      this.callback = callback;
+      instance = this;
+    }
+    observe() {}
+    disconnect() {}
+    emit(entries) {
+      this.callback({ getEntries: () => entries });
+    }
+  }
+  const browser = installFakeBrowser({ performanceObserver: FakePerformanceObserver });
+  try {
+    const notified = [];
+    const renderer = new LightweightToastRenderer({ onStateChanged: () => notified.push(Date.now()) });
+    renderer.configure(true, 6, { diagnosticsEnabled: true });
+    for (let burst = 0; burst < 5; burst += 1) {
+      instance.emit(Array.from({ length: 30 }, () => ({ duration: 100 + burst })));
+    }
+    assert.equal(renderer.getStats().observedLongFrames, 150);
+    await new Promise(resolve => setTimeout(resolve, 30));
+    assert.equal(notified.length, 1);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.equal(notified.length, 2);
+    renderer.resetDiagnostics();
+    assert.equal(renderer.getStats().observedLongFrames, 0);
+    renderer.stop();
+  } finally {
+    browser.restore();
+  }
+});
+
 test('performance sampling reuses observers, excludes buffered history and drains reset queues', () => {
   const instances = [];
   let drained = 0;

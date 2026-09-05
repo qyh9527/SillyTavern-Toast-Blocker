@@ -6,8 +6,10 @@ const sample = () => ({
   earlyRuleInstalled: true, runtimeStyle: true, guardedMethods: 4, auxiliaryMethods: 2,
   settings: { enabled: true, blockedLevels: { success: true, info: true, warning: true, error: false },
     redrawEnabled: true, redrawMaxVisible: 6, diagnosticsEnabled: true },
-  redraw: { active: 0, pending: 0, adoptedActive: 0, frameSamples: 0, averageBatchMs: 0,
-    maxBatchMs: 0, observerType: 'long-animation-frame', observedLongFrames: 152, maxObservedLongFrameMs: 587.4 },
+  redraw: { active: 0, pending: 0, adoptedActive: 0, rendered: 7, aggregated: 2, pendingPeak: 3,
+    visibilityPauses: 1, frameSamples: 0, averageBatchMs: 0,
+    maxBatchMs: 0, overBudgetBatches: 0, observerType: 'long-animation-frame',
+    observedLongFrames: 152, maxObservedLongFrameMs: 587.4 },
 });
 
 test('device report with page long frames stays healthy and zero batches mean no samples', () => {
@@ -16,23 +18,36 @@ test('device report with page long frames stays healthy and zero batches mean no
   assert.equal(view.tone, 'ok');
   assert.equal(view.adapter, '混合适配 · 正常');
   assert.equal(view.batch, '暂无批次样本');
+  assert.equal(view.maxBatch, '暂无样本');
   assert.equal(view.page, '152 次');
   assert.equal(view.pageNote, '最长 587.4 ms');
   assert.equal(view.budget, 0);
 });
 
+test('merged counters expose redraw pipeline statistics alongside the overview model', () => {
+  const view = buildDiagnosticView(sample(), 'mixed');
+  assert.equal(view.rendered, '7');
+  assert.equal(view.aggregated, '2');
+  assert.equal(view.pendingPeak, '3');
+  assert.equal(view.visibilityPauses, '1');
+  assert.equal(view.overBudget, '0');
+  assert.equal(view.collection, '采集中 · 本页累计，清零后重新统计');
+});
+
 test('missing guard shows a warning and measured batches use bounded budget bars', () => {
   const status = sample(); status.guardedMethods = 2;
-  status.redraw.frameSamples = 3; status.redraw.averageBatchMs = 30;
+  status.redraw.frameSamples = 3; status.redraw.averageBatchMs = 30; status.redraw.maxBatchMs = 48.2;
   const view = buildDiagnosticView(status, 'context');
   assert.equal(view.tone, 'warning'); assert.equal(view.guards, '2 / 4');
   assert.equal(view.batch, '30.00 ms'); assert.equal(view.budget, 100);
+  assert.equal(view.maxBatch, '48.20 ms');
 });
 
 test('disabled diagnostics and missing page support are distinct from zero-cost measurements', () => {
   const status = sample(); status.settings.diagnosticsEnabled = false;
   status.redraw.observerType = null; status.redraw.observedLongFrames = 0;
   assert.equal(buildDiagnosticView(status, 'legacy').page, '尚未采集');
+  assert.equal(buildDiagnosticView(status, 'legacy').collection, '耗时采集已关闭；已有统计保留');
   status.settings.diagnosticsEnabled = true;
   assert.equal(buildDiagnosticView(status, 'legacy').page, '当前环境不支持');
 });

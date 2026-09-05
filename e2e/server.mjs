@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { resolve, extname } from 'node:path';
+import { relative, resolve, extname, sep } from 'node:path';
 
 const root = process.cwd();
 const legacy = {
@@ -15,7 +15,9 @@ http.createServer(async (request, response) => {
     return response.end(legacy[path]);
   }
   const file = resolve(root, `.${path === '/' ? '/e2e/fixture.html' : path}`);
-  if (!file.startsWith(`${root}/`)) { response.writeHead(403); return response.end(); }
+  // path.resolve 随平台产生 \ 或 /，字符串前缀在 Windows 会误拦截；按相对路径越界判断。
+  const within = relative(root, file);
+  if (within.startsWith('..') || resolve(within) === within) { response.writeHead(403); return response.end(); }
   try {
     const bytes = await readFile(file);
     const type = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' }[extname(file)];

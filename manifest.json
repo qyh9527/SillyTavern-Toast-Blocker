@@ -16,7 +16,7 @@
     "activate": "onActivate"
   },
   "author": "qyh9527",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "homePage": "https://github.com/qyh9527/SillyTavern-Toast-Blocker",
   "auto_update": true,
   "minimum_client_version": "1.12.13"

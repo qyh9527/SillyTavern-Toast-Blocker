@@ -19,6 +19,8 @@ class ToastBlockerHost {
     refreshConfirmation;
     statusRenderScheduled = false;
     statusRenderTimer = null;
+    /** 概览手动展开标记：诊断开关切换时只在用户未曾手动干预时自动展开/收起。 */
+    overviewManuallyToggled = false;
     constructor(adapter) {
         this.adapter = adapter;
         const stored = normalizeSettings(this.adapter.extensionSettings[SETTINGS_KEY]);
@@ -413,20 +415,6 @@ class ToastBlockerHost {
           <button id="${APP_ID}-cleanup" class="menu_button">关闭并清理</button>
         </div>
         ${DIAGNOSTIC_OVERVIEW_HTML}
-        <section class="qyh-toast-blocker-diagnostics" id="${APP_ID}-diagnostics-panel" aria-label="本地性能诊断结果" hidden>
-          <div class="qyh-toast-blocker-diagnostics-grid">
-            <div><small>已重绘</small><strong data-diagnostic="rendered">0</strong></div>
-            <div><small>已聚合</small><strong data-diagnostic="aggregated">0</strong></div>
-            <div><small>队列峰值</small><strong data-diagnostic="pendingPeak">0</strong></div>
-            <div><small>后台暂停</small><strong data-diagnostic="visibilityPauses">0</strong></div>
-            <div><small>平均批次</small><strong data-diagnostic="averageBatchMs">0 ms</strong></div>
-            <div><small>最慢批次</small><strong data-diagnostic="maxBatchMs">0 ms</strong></div>
-            <div><small>超帧预算</small><strong data-diagnostic="overBudgetBatches">0</strong></div>
-            <div><small>页面长帧</small><strong data-diagnostic="observedLongFrames">—</strong></div>
-          </div>
-          <div class="qyh-toast-blocker-help" data-diagnostic="observerSupport"></div>
-          <button id="${APP_ID}-diagnostics-reset" class="menu_button" type="button">清空诊断统计</button>
-        </section>
         <textarea id="${APP_ID}-report" class="text_pole" readonly hidden rows="6" aria-label="自检报告，可手动复制"></textarea>
         <p class="qyh-toast-blocker-help">首次安装或重新启用后建议重启一次酒馆。关闭、禁用或删除扩展时会清理持久规则。</p>
       </div>`;
@@ -452,6 +440,9 @@ class ToastBlockerHost {
         });
         wrapper.querySelector(`#${APP_ID}-diagnostics-reset`)?.addEventListener('click', () => {
             this.resetDiagnostics();
+        });
+        wrapper.querySelector('.qyh-toast-overview-toggle')?.addEventListener('click', event => {
+            this.toggleOverview(event.currentTarget);
         });
         wrapper.querySelectorAll('[data-toast-level]').forEach(input => {
             input.addEventListener('change', event => {
@@ -516,6 +507,32 @@ class ToastBlockerHost {
         const content = this.panel.querySelector('.inline-drawer-content');
         return Boolean(content && content.getClientRects().length > 0);
     }
+    /** 概览默认折叠；打开本地性能诊断自动展开，关闭自动收回。 */
+    toggleOverview(button = null) {
+        this.overviewManuallyToggled = true;
+        const target = button ?? this.panel?.querySelector('.qyh-toast-overview-toggle') ?? null;
+        this.setOverviewCollapsed(target, this.isOverviewCollapsed());
+    }
+    isOverviewCollapsed() {
+        const body = this.panel?.querySelector('#qyh-toast-overview-body');
+        return Boolean(body?.hidden);
+    }
+    setOverviewCollapsed(button, collapsed) {
+        const body = this.panel?.querySelector('#qyh-toast-overview-body');
+        if (body)
+            body.hidden = collapsed;
+        if (button)
+            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+    /** 诊断状态变化时自动展开/收回；用户手动切换过后，后续开关切换不再覆盖用户选择。 */
+    syncOverviewCollapse() {
+        if (this.overviewManuallyToggled)
+            return;
+        const button = this.panel?.querySelector('.qyh-toast-overview-toggle') ?? null;
+        const collapsed = !this.settings.diagnosticsEnabled;
+        if (collapsed !== this.isOverviewCollapsed())
+            this.setOverviewCollapsed(button, collapsed);
+    }
     paintStatusNow() {
         if (!this.panel?.isConnected)
             return;
@@ -547,43 +564,14 @@ class ToastBlockerHost {
             input.closest('.qyh-toast-blocker-level')?.classList.toggle('is-selected', checked);
         });
         const runtime = this.runtime.getStatus();
-        const diagnosticPanel = this.panel.querySelector(`#${APP_ID}-diagnostics-panel`);
-        if (diagnosticPanel)
-            diagnosticPanel.hidden = !this.settings.diagnosticsEnabled;
-        // 抽屉合上时跳过 12 处诊断节点写回，只维护状态行。
+        this.syncOverviewCollapse();
+        // 抽屉合上时跳过概览写回，只维护状态行。
         if (this.isPanelContentVisible()) {
             paintDiagnosticView(this.panel, {
                 ...runtime,
                 settings: this.settings,
                 earlyRuleInstalled: hasManagedCss(this.adapter.powerUserSettings.custom_css),
             }, this.adapter.source);
-        }
-        if (this.settings.diagnosticsEnabled && this.isPanelContentVisible()) {
-            const diagnosticValues = {
-                rendered: String(runtime.redraw.rendered),
-                aggregated: String(runtime.redraw.aggregated),
-                pendingPeak: String(runtime.redraw.pendingPeak),
-                visibilityPauses: String(runtime.redraw.visibilityPauses),
-                averageBatchMs: runtime.redraw.frameSamples ? `${runtime.redraw.averageBatchMs.toFixed(2)} ms` : '暂无样本',
-                maxBatchMs: runtime.redraw.frameSamples ? `${runtime.redraw.maxBatchMs.toFixed(2)} ms` : '暂无样本',
-                overBudgetBatches: String(runtime.redraw.overBudgetBatches),
-                observedLongFrames: runtime.redraw.observerType === null
-                    ? '—'
-                    : String(runtime.redraw.observedLongFrames),
-            };
-            for (const [key, value] of Object.entries(diagnosticValues)) {
-                const target = this.panel.querySelector(`[data-diagnostic="${key}"]`);
-                if (target)
-                    target.textContent = value;
-            }
-            const observerSupport = this.panel.querySelector('[data-diagnostic="observerSupport"]');
-            if (observerSupport) {
-                observerSupport.textContent = runtime.redraw.observerType === 'long-animation-frame'
-                    ? `整页观察：Long Animation Frame · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms · 不代表插件耗时`
-                    : runtime.redraw.observerType === 'longtask'
-                        ? `整页观察：Long Task · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms · 不代表插件耗时`
-                        : '当前 WebView 不提供页面长帧条目；批次耗时诊断仍正常工作。';
-            }
         }
         const earlyRule = hasManagedCss(this.adapter.powerUserSettings.custom_css);
         const status = this.panel.querySelector(`#${APP_ID}-status`);

@@ -17,10 +17,14 @@ test('header version is rendered from the shared release constant', () => {
   assert.ok(DIAGNOSTIC_OVERVIEW_HTML.includes(`v${manifest.version}`));
 });
 
-test('header reserves a fixed slot and avoids expensive persistent effects', () => {
-  assert.match(css, /--qyh-status-head-height:/);
-  assert.match(css, /height:\s*var\(--qyh-status-head-height\)/);
-  assert.match(css, /padding:\s*calc\(var\(--qyh-status-head-top\) \+ var\(--qyh-status-head-height\)/);
+test('header uses normal flow with identity and health on separate rows', () => {
+  assert.match(css, /\.inline-drawer-content\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column/);
+  assert.match(css, /\.qyh-toast-plugin-status\s*\{[\s\S]*order:\s*-1[\s\S]*flex-direction:\s*column/);
+  assert.match(css, /\.qyh-toast-plugin-health\s*\{[\s\S]*align-self:\s*flex-start/);
+  assert.doesNotMatch(css, /\.qyh-toast-plugin-status\s*\{[\s\S]*position:\s*absolute/);
+});
+
+test('top status header remains lightweight', () => {
   assert.doesNotMatch(css, /backdrop-filter/);
   assert.doesNotMatch(css, /transition:\s*all/);
   assert.doesNotMatch(css, /animation:\s*[^;]+infinite/);

@@ -7,5 +7,11 @@ declare var ToastBlocker: {
   redraw(enabled: boolean): Promise<void>;
   setLevel(level: 'success' | 'info' | 'warning' | 'error', blocked: boolean): Promise<void>;
   shutdown(): Promise<void>;
+  aggregate(enabled: boolean): Promise<void>;
+  diagnostics(enabled: boolean): Promise<void>;
+  resetDiagnostics(): void;
+  selfCheck(): string;
   status(): Record<string, unknown>;
 } | undefined;
+
+declare var SillyTavern: { getContext(): Record<string, unknown> } | undefined;

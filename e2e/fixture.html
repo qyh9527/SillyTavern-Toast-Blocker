@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toast 插件回归测试</title>
+<link rel="stylesheet" href="/node_modules/toastr/build/toastr.min.css">
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { margin: 12px; background: #242830; color: #e5e8ed; font: 15px sans-serif; }
+  #extensions_settings2 { max-width: 560px; }
+  .inline-drawer-content { display: none; }
+  .inline-drawer-header { cursor: pointer; }
+  .menu_button { color: inherit; background: #333; border: 1px solid #777; padding: 8px; }
+  .text_pole { box-sizing: border-box; max-width: 100%; }
+</style>
+<div id="extensions_settings2"></div>
+<textarea id="customCSS" hidden></textarea>
+<script src="/node_modules/jquery/dist/jquery.min.js"></script>
+<script src="/node_modules/toastr/build/toastr.min.js"></script>
+<script>
+  window.fixtureExtensionSettings = JSON.parse(sessionStorage.getItem('fixture-settings') || '{}');
+  Object.assign(window.fixtureExtensionSettings, window.initialSettings || {});
+  window.fixturePowerUser = { custom_css: sessionStorage.getItem('fixture-css') || 'body { --user-style: 1; }' };
+  const customStyle = document.createElement('style');
+  customStyle.id = 'custom-style'; customStyle.textContent = fixturePowerUser.custom_css;
+  document.head.append(customStyle);
+  window.fixtureSave = async () => {
+    await new Promise(resolve => setTimeout(resolve, 20));
+    sessionStorage.setItem('fixture-settings', JSON.stringify(fixtureExtensionSettings));
+    sessionStorage.setItem('fixture-css', fixturePowerUser.custom_css);
+  };
+  const mode = new URLSearchParams(location.search).get('adapter');
+  if (mode !== 'legacy') window.SillyTavern = { getContext: () => ({
+    extensionSettings: fixtureExtensionSettings, powerUserSettings: fixturePowerUser,
+    saveSettingsDebounced: fixtureSave, ...(mode === 'mixed' ? {} : { saveSettings: fixtureSave })
+  }) };
+  toastr.options = { timeOut: 0, hideDuration: 0, showDuration: 0 };
+  for (let i = 0; i < (window.startupCount || 0); i++) {
+    toastr.info('<button class="native-link">启动按钮 ' + i + '</button>');
+  }
+  window.linkClicks = 0;
+  $('.native-link').on('click', () => window.linkClicks++);
+  $(document).on('click', '.inline-drawer-toggle', function () { $(this).next().toggle(); });
+</script>
+<script type="module">window.fixtureModule = await import('/dist/index.js'); window.fixtureReady = true;</script>
+</html>

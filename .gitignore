@@ -3,3 +3,6 @@ coverage/
 *.log
 # 本地评审文档，不入库
 SillyTavern-Toast-Blocker-*.md
+
+playwright-report/
+test-results/

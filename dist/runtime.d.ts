@@ -36,6 +36,7 @@ export declare class ToastRuntimeBlocker {
     auxiliaryGuard: ToastrAuxiliaryGuard | null;
     guardedTarget: Record<string, unknown> | null;
     observer: MutationObserver | null;
+    observedContainer: Element | null;
     watchdog: ReturnType<typeof setInterval> | null;
     watchdogFastTicks: number;
     watchdogSlow: boolean;

@@ -11,6 +11,7 @@ interface RendererCallbacks {
 export interface RedrawStats {
     enabled: boolean;
     active: number;
+    adoptedActive: number;
     pending: number;
     rendered: number;
     evicted: number;
@@ -35,6 +36,10 @@ export declare class LightweightToastRenderer {
     aggregateDuplicates: boolean;
     diagnosticsEnabled: boolean;
     private active;
+    private adopted;
+    private visibleOrder;
+    private containerObserver;
+    private observedContainers;
     private containers;
     private evicted;
     private fallbacks;
@@ -107,6 +112,10 @@ export declare class LightweightToastRenderer {
     private dismissElement;
     private finishPending;
     private finishActive;
+    private releaseAdopted;
+    private removeEmptyContainer;
+    /** 定向观察器及时回收原生计时器移除的节点；看门狗处理整个目标被卸载的情况。 */
+    pruneDetachedToasts(): void;
     private enforceVisibleLimit;
     private resetPreviousMessageIfEmpty;
     private requestFrame;

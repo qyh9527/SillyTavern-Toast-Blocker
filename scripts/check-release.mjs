@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { readFileSync, existsSync } from 'node:fs';
+import { VERSION } from '../dist/version.js';
+const json = path => JSON.parse(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'));
+const manifest = json('manifest.json');
+const pkg = json('package.json');
+const lock = json('package-lock.json');
+for (const version of [pkg.version, lock.version, lock.packages[''].version, VERSION]) assert.equal(version, manifest.version);
+assert.ok(existsSync(new URL(`../${manifest.js}`, import.meta.url)));
+assert.ok(existsSync(new URL(`../${manifest.css}`, import.meta.url)));
+console.log(`发布元数据一致：v${VERSION}`);

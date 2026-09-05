@@ -74,6 +74,15 @@ test('移动布局、键盘开关与剪贴板失败时手动复制', async ({ pa
     const rects = await page.locator('.qyh-toast-blocker-level').evaluateAll(nodes => nodes.map(n => { const r = n.getBoundingClientRect(); return { x: r.x, y: r.y }; }));
     expect(rects[0].y).toBe(rects[1].y); expect(rects[2].y).toBe(rects[3].y);
     expect(rects[0].x).toBe(rects[2].x); expect(rects[2].y).toBeGreaterThan(rects[0].y);
+
+    // 顶部状态头必须作为正常文档流的独立块，不能再次覆盖“启用分类屏蔽”。
+    const [headerBox, firstRowBox] = await Promise.all([
+      page.locator('.qyh-toast-plugin-status').boundingBox(),
+      page.locator('.inline-drawer-content > .qyh-toast-blocker-row').first().boundingBox(),
+    ]);
+    expect(headerBox).not.toBeNull();
+    expect(firstRowBox).not.toBeNull();
+    expect(headerBox.y + headerBox.height).toBeLessThanOrEqual(firstRowBox.y + 1);
   }
 });
 
@@ -135,9 +144,13 @@ test('实机数据可视化区分页面长帧与无重绘样本，清零后同�
   await page.locator('.inline-drawer-toggle').click();
   // 诊断已启用：概览自动展开，无需手动点击。
   const overviewToggle = page.locator('.qyh-toast-overview-toggle');
+  const topHealth = page.locator('.qyh-toast-plugin-status [data-health="summary"]');
+  const overviewHealth = page.locator('.qyh-toast-overview [data-health="summary"]');
   await expect(overviewToggle).toHaveAttribute('aria-expanded', 'true');
   await page.evaluate(() => fixturePerformance.emit());
-  await expect(page.locator('[data-health="summary"]')).toHaveText('通知链路正常');
+  // 顶部小状态头与诊断概览必须同步显示同一份健康模型。
+  await expect(topHealth).toHaveText('通知链路正常');
+  await expect(overviewHealth).toHaveText('通知链路正常');
   await expect(page.locator('[data-health="batch"]')).toHaveText('暂无批次样本');
   await expect(page.locator('[data-health="page"]')).toHaveText('152 次');
   await expect(page.locator('[data-health="rendered"]')).toHaveText('0');

@@ -1,5 +1,6 @@
 import { normalizeSettings } from './core.js';
 import type { RuntimeStatus } from './runtime.js';
+import { VERSION } from './version.js';
 
 export interface DiagnosticStatus extends RuntimeStatus {
   settings: unknown;
@@ -45,6 +46,13 @@ export function buildDiagnosticView(status: DiagnosticStatus, source: string) {
 }
 
 export const DIAGNOSTIC_OVERVIEW_HTML = `
+  <section class="qyh-toast-plugin-status" aria-label="插件状态">
+    <div class="qyh-toast-plugin-status__identity">
+      <strong>Toast 屏蔽与重绘器</strong>
+      <span class="qyh-toast-plugin-version">v${VERSION}</span>
+    </div>
+    <span data-health="summary" class="qyh-toast-health-badge qyh-toast-plugin-health"></span>
+  </section>
   <section class="qyh-toast-overview" aria-label="可视化诊断概览">
     <button class="qyh-toast-overview-toggle" type="button" aria-expanded="false" aria-controls="qyh-toast-overview-body">
       <strong>诊断概览</strong>
@@ -83,12 +91,20 @@ export const DIAGNOSTIC_OVERVIEW_HTML = `
 
 export function paintDiagnosticView(panel: HTMLElement, status: DiagnosticStatus, source: string): void {
   const view = buildDiagnosticView(status, source);
+  const summaryNodes = panel.querySelectorAll<HTMLElement>('[data-health="summary"]');
   for (const [key, value] of Object.entries(view)) {
+    if (key === 'summary') {
+      for (const node of summaryNodes) {
+        if (node.textContent !== String(value)) node.textContent = String(value);
+      }
+      continue;
+    }
     const node = panel.querySelector<HTMLElement>(`[data-health="${key}"]`);
     if (node && node.textContent !== String(value)) node.textContent = String(value);
   }
-  const badge = panel.querySelector<HTMLElement>('[data-health="summary"]');
-  if (badge && badge.dataset.tone !== view.tone) badge.dataset.tone = view.tone;
+  for (const badge of summaryNodes) {
+    if (badge.dataset.tone !== view.tone) badge.dataset.tone = view.tone;
+  }
   const bar = panel.querySelector<HTMLElement>('[data-health-budget]');
   if (bar) bar.style.width = `${view.samples ? view.budget : 0}%`;
 }

@@ -37,7 +37,7 @@ export function createSelfCheckReport(status, source) {
         counters[key] = typeof value === 'number' && Number.isFinite(value) ? value : 0;
     }
     return JSON.stringify({
-        plugin: 'SillyTavern Toast Blocker', version: VERSION, reportSchema: 1,
+        plugin: 'SillyTavern Toast Blocker', version: VERSION, reportSchema: 2,
         hostAdapter: source, capabilities, settings,
         runtime: {
             earlyRuleInstalled: Boolean(status.earlyRuleInstalled),
@@ -47,9 +47,13 @@ export function createSelfCheckReport(status, source) {
             observingDom: Boolean(status.observingDom),
             redrawReady: globalThis.document?.documentElement?.classList.contains(REDRAW_READY_CLASS) ?? false,
             ...counters,
+            observerType: ['long-animation-frame', 'longtask'].includes(String(redraw?.observerType)) ? redraw?.observerType : null,
+            timingSampleState: Number(redraw?.frameSamples) > 0 ? 'sampled' : 'no-samples',
+            pageTimingScope: 'whole-page',
+            pageTimingCollection: 'new-entries-while-enabled-until-reset',
         },
         findings: issues.length ? issues : ['当前检查项未发现异常；这不代表已经通过真机兼容测试。'],
-        limitations: ['启动期原生通知保留宿主计时器，不支持剩余时间冻结。', '报告不包含通知正文、聊天、密钥、URL 或用户自定义 CSS；不会自动上传。'],
+        limitations: ['页面长帧包含宿主、主题与其他扩展，不能据此归因于本插件。', 'frameSamples 为 0 表示暂无重绘批次样本，不表示插件开销为零。', '启动期原生通知保留宿主计时器，不支持剩余时间冻结。', '报告不包含通知正文、聊天、密钥、URL 或用户自定义 CSS；不会自动上传。'],
     }, null, 2);
 }
 export async function copyReport(report) {

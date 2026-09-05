@@ -12,7 +12,7 @@ test('self-check excludes private fields and explains missing guards and early C
   assert.equal(parsed.runtime.rendered, 2);
   assert.ok(parsed.findings.some(line => line.includes('早期规则缺失')));
   assert.ok(parsed.findings.some(line => line.includes('方法守卫')));
-  assert.equal(parsed.version, '1.4.0');
+  assert.equal(parsed.version, '1.4.1');
 });
 
 test('clipboard unavailable or denied returns false for manual selection', async () => {

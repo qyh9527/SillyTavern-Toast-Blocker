@@ -67,7 +67,7 @@ test('移动布局、键盘开关与剪贴板失败时手动复制', async ({ pa
   const output = page.locator('#qyh-toast-blocker-report');
   await expect(output).toBeVisible();
   const report = JSON.parse(await output.inputValue());
-  expect(report.version).toBe('1.4.0');
+  expect(report.version).toBe('1.4.1');
   expect(report.settings.blockedLevels.info).toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   if (page.viewportSize().width < 600) {
@@ -98,4 +98,55 @@ test('刷新需要二次确认且等待设置落盘', async ({ page }) => {
   await Promise.all([page.waitForEvent('load'), refresh.click()]);
   await page.waitForFunction(() => window.fixtureReady);
   expect(await page.evaluate(() => ToastBlocker.status().settings.redrawMaxVisible)).toBe(3);
+});
+
+test('宿主强制显示文本框时仍无空白框，复制成功后收起且概览保持可见', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async text => { window.copiedReport = text; } },
+  }));
+  await ready(page);
+  await page.locator('.inline-drawer-toggle').click();
+  await page.addStyleTag({ content: 'textarea.text_pole { display: block !important; }' });
+  const report = page.locator('#qyh-toast-blocker-report');
+  await expect(report).toBeHidden();
+  await expect(page.locator('.qyh-toast-overview')).toBeVisible();
+  await expect(page.locator('[data-health="batch"]')).toHaveText('暂无批次样本');
+  await page.locator('#qyh-toast-blocker-self-check').click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.copiedReport).version)).toBe('1.4.1');
+  await expect(report).toBeHidden();
+  await expect(page.locator('#qyh-toast-blocker-diagnostics-panel')).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('实机数据可视化区分页面长帧与无重绘样本，清零后同步更新', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.initialSettings = { qyh_toast_blocker: { enabled: true, blockedLevels: { success: true, info: true, warning: true, error: false }, redrawEnabled: true, diagnosticsEnabled: true } };
+    window.PerformanceObserver = class {
+      static supportedEntryTypes = ['long-animation-frame'];
+      constructor(callback) { this.callback = callback; window.fixturePerformance = this; }
+      observe(options) { window.fixtureObserveOptions = options; }
+      disconnect() {}
+      takeRecords() { return []; }
+      emit() { this.callback({ getEntries: () => Array.from({ length: 152 }, () => ({ duration: 587.4 })) }); }
+    };
+  });
+  await ready(page, '?adapter=mixed');
+  await page.locator('.inline-drawer-toggle').click();
+  await page.evaluate(() => fixturePerformance.emit());
+  await expect(page.locator('[data-health="summary"]')).toHaveText('通知链路正常');
+  await expect(page.locator('[data-health="batch"]')).toHaveText('暂无批次样本');
+  await expect(page.locator('[data-health="page"]')).toHaveText('152 次');
+  await expect(page.locator('[data-health="pageNote"]')).toHaveText('最长 587.4 ms');
+  await expect(page.locator('.qyh-toast-page-observation')).toContainText('不能据此归因于本插件');
+  expect(await page.evaluate(() => fixtureObserveOptions.buffered)).toBe(false);
+  await page.locator('#qyh-toast-blocker-diagnostics-reset').click();
+  await expect(page.locator('[data-health="page"]')).toHaveText('0 次');
+  const snapshot = await page.evaluate(() => JSON.parse(ToastBlocker.selfCheck()));
+  expect(snapshot.reportSchema).toBe(2);
+  expect(snapshot.runtime.timingSampleState).toBe('no-samples');
+  expect(snapshot.runtime.pageTimingScope).toBe('whole-page');
+  await page.evaluate(() => toastr.error('重绘测量'));
+  await expect(page.locator('[data-health="batch"]')).toContainText('ms');
+  await page.evaluate(() => toastr.remove());
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

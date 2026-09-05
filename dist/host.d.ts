@@ -55,8 +55,8 @@ declare class ToastBlockerHost {
     forceSave(): Promise<void>;
     mountPanelWhenReady(): Promise<void>;
     renderStatus(): void;
-    /** 抽屉合上时跳过诊断数字刷新，只保留轻量的状态行与开关回显。 */
-    private isDiagnosticsVisible;
+    /** 抽屉合上时跳过概览与诊断数字写回；不增加独立轮询。 */
+    private isPanelContentVisible;
     private paintStatusNow;
     getPublicStatus(): PublicStatus;
 }

@@ -1,5 +1,6 @@
 import { resolveHostAdapter } from './host-adapter.js';
 import { createSelfCheckReport, copyReport } from './self-check.js';
+import { DIAGNOSTIC_OVERVIEW_HTML, paintDiagnosticView } from './diagnostics-view.js';
 import { SETTINGS_KEY, TOAST_METHODS, getBlockedMethods, hasManagedCss, normalizeMaxVisible, normalizeSettings, updateManagedCss, } from './core.js';
 import { ToastRuntimeBlocker } from './runtime.js';
 import { createTimedConfirmation } from './interaction.js';
@@ -390,20 +391,7 @@ class ToastBlockerHost {
             <span>启用</span>
           </label>
         </div>
-        <section class="qyh-toast-blocker-diagnostics" id="${APP_ID}-diagnostics-panel" aria-label="本地性能诊断结果" hidden>
-          <div class="qyh-toast-blocker-diagnostics-grid">
-            <div><small>已重绘</small><strong data-diagnostic="rendered">0</strong></div>
-            <div><small>已聚合</small><strong data-diagnostic="aggregated">0</strong></div>
-            <div><small>队列峰值</small><strong data-diagnostic="pendingPeak">0</strong></div>
-            <div><small>后台暂停</small><strong data-diagnostic="visibilityPauses">0</strong></div>
-            <div><small>平均批次</small><strong data-diagnostic="averageBatchMs">0 ms</strong></div>
-            <div><small>最慢批次</small><strong data-diagnostic="maxBatchMs">0 ms</strong></div>
-            <div><small>超帧预算</small><strong data-diagnostic="overBudgetBatches">0</strong></div>
-            <div><small>页面长帧</small><strong data-diagnostic="observedLongFrames">—</strong></div>
-          </div>
-          <div class="qyh-toast-blocker-help" data-diagnostic="observerSupport"></div>
-          <button id="${APP_ID}-diagnostics-reset" class="menu_button" type="button">清空诊断统计</button>
-        </section>
+
         <div class="qyh-toast-blocker-row">
           <div>
             <strong>控制台记录</strong>
@@ -424,7 +412,22 @@ class ToastBlockerHost {
           <button id="${APP_ID}-self-check" class="menu_button" type="button">一键自检并复制报告</button>
           <button id="${APP_ID}-cleanup" class="menu_button">关闭并清理</button>
         </div>
-        <textarea id="${APP_ID}-report" class="text_pole" readonly hidden rows="10" aria-label="自检报告，可手动复制"></textarea>
+        ${DIAGNOSTIC_OVERVIEW_HTML}
+        <section class="qyh-toast-blocker-diagnostics" id="${APP_ID}-diagnostics-panel" aria-label="本地性能诊断结果" hidden>
+          <div class="qyh-toast-blocker-diagnostics-grid">
+            <div><small>已重绘</small><strong data-diagnostic="rendered">0</strong></div>
+            <div><small>已聚合</small><strong data-diagnostic="aggregated">0</strong></div>
+            <div><small>队列峰值</small><strong data-diagnostic="pendingPeak">0</strong></div>
+            <div><small>后台暂停</small><strong data-diagnostic="visibilityPauses">0</strong></div>
+            <div><small>平均批次</small><strong data-diagnostic="averageBatchMs">0 ms</strong></div>
+            <div><small>最慢批次</small><strong data-diagnostic="maxBatchMs">0 ms</strong></div>
+            <div><small>超帧预算</small><strong data-diagnostic="overBudgetBatches">0</strong></div>
+            <div><small>页面长帧</small><strong data-diagnostic="observedLongFrames">—</strong></div>
+          </div>
+          <div class="qyh-toast-blocker-help" data-diagnostic="observerSupport"></div>
+          <button id="${APP_ID}-diagnostics-reset" class="menu_button" type="button">清空诊断统计</button>
+        </section>
+        <textarea id="${APP_ID}-report" class="text_pole" readonly hidden rows="6" aria-label="自检报告，可手动复制"></textarea>
         <p class="qyh-toast-blocker-help">首次安装或重新启用后建议重启一次酒馆。关闭、禁用或删除扩展时会清理持久规则。</p>
       </div>`;
         parent.append(wrapper);
@@ -506,12 +509,12 @@ class ToastBlockerHost {
             flush();
         }
     }
-    /** 抽屉合上时跳过诊断数字刷新，只保留轻量的状态行与开关回显。 */
-    isDiagnosticsVisible() {
+    /** 抽屉合上时跳过概览与诊断数字写回；不增加独立轮询。 */
+    isPanelContentVisible() {
         if (!this.panel?.isConnected)
             return false;
         const content = this.panel.querySelector('.inline-drawer-content');
-        return Boolean(this.settings.diagnosticsEnabled && content && content.getClientRects().length > 0);
+        return Boolean(content && content.getClientRects().length > 0);
     }
     paintStatusNow() {
         if (!this.panel?.isConnected)
@@ -548,14 +551,21 @@ class ToastBlockerHost {
         if (diagnosticPanel)
             diagnosticPanel.hidden = !this.settings.diagnosticsEnabled;
         // 抽屉合上时跳过 12 处诊断节点写回，只维护状态行。
-        if (this.isDiagnosticsVisible()) {
+        if (this.isPanelContentVisible()) {
+            paintDiagnosticView(this.panel, {
+                ...runtime,
+                settings: this.settings,
+                earlyRuleInstalled: hasManagedCss(this.adapter.powerUserSettings.custom_css),
+            }, this.adapter.source);
+        }
+        if (this.settings.diagnosticsEnabled && this.isPanelContentVisible()) {
             const diagnosticValues = {
                 rendered: String(runtime.redraw.rendered),
                 aggregated: String(runtime.redraw.aggregated),
                 pendingPeak: String(runtime.redraw.pendingPeak),
                 visibilityPauses: String(runtime.redraw.visibilityPauses),
-                averageBatchMs: `${runtime.redraw.averageBatchMs.toFixed(2)} ms`,
-                maxBatchMs: `${runtime.redraw.maxBatchMs.toFixed(2)} ms`,
+                averageBatchMs: runtime.redraw.frameSamples ? `${runtime.redraw.averageBatchMs.toFixed(2)} ms` : '暂无样本',
+                maxBatchMs: runtime.redraw.frameSamples ? `${runtime.redraw.maxBatchMs.toFixed(2)} ms` : '暂无样本',
                 overBudgetBatches: String(runtime.redraw.overBudgetBatches),
                 observedLongFrames: runtime.redraw.observerType === null
                     ? '—'
@@ -569,9 +579,9 @@ class ToastBlockerHost {
             const observerSupport = this.panel.querySelector('[data-diagnostic="observerSupport"]');
             if (observerSupport) {
                 observerSupport.textContent = runtime.redraw.observerType === 'long-animation-frame'
-                    ? `页面长帧增强：Long Animation Frame · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms`
+                    ? `整页观察：Long Animation Frame · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms · 不代表插件耗时`
                     : runtime.redraw.observerType === 'longtask'
-                        ? `页面长帧回退：Long Task · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms`
+                        ? `整页观察：Long Task · 最长 ${runtime.redraw.maxObservedLongFrameMs.toFixed(1)} ms · 不代表插件耗时`
                         : '当前 WebView 不提供页面长帧条目；批次耗时诊断仍正常工作。';
             }
         }

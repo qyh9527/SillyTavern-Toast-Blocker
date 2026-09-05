@@ -657,3 +657,119 @@
     animation-duration: 1ms;
   }
 }
+
+/* 宿主 textarea { display: block } 会覆盖 UA 的 [hidden]，必须显式保护。 */
+#qyh-toast-blocker-panel [hidden] {
+  display: none !important;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview {
+  margin: 0.8rem 0;
+  padding: 0.8rem;
+  border: 1px solid rgb(100 175 213 / 40%);
+  border-radius: 0.65rem;
+  background: rgb(50 120 160 / 8%);
+  overflow-wrap: anywhere;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-health-badge {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.8em;
+  color: #a8afba;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-health-badge[data-tone="ok"] { color: #74d7b3; }
+#qyh-toast-blocker-panel .qyh-toast-health-badge[data-tone="warning"] { color: #f1bc74; }
+
+#qyh-toast-blocker-panel .qyh-toast-health-checks {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-health-checks > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.85em;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-health-checks > div > span,
+#qyh-toast-blocker-panel .qyh-toast-overview-grid small,
+#qyh-toast-blocker-panel .qyh-toast-overview-grid article > span {
+  color: var(--grey70, #b2b5bd);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-grid article {
+  min-width: 0;
+  padding: 0.65rem;
+  border-radius: 0.5rem;
+  background: rgb(0 0 0 / 16%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-grid article > strong {
+  font-size: 1.2em;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-grid article > span,
+#qyh-toast-blocker-panel .qyh-toast-overview-grid article > small {
+  font-size: 0.8em;
+  line-height: 1.4;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-overview-grid .qyh-toast-page-observation {
+  grid-column: 1 / -1;
+  border-left: 3px solid #9aacf0;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-page-observation p {
+  margin: 0;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+#qyh-toast-blocker-panel .qyh-toast-budget {
+  height: 0.35rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgb(140 150 175 / 20%);
+}
+
+#qyh-toast-blocker-panel .qyh-toast-budget > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #7cbbeb;
+}
+
+#qyh-toast-blocker-panel #qyh-toast-blocker-report {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 8rem;
+  max-height: 18rem;
+  font-size: 0.8em;
+  resize: vertical;
+}

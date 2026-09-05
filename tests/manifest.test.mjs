@@ -7,7 +7,7 @@ const packageJson = JSON.parse(await readFile(new URL('../package.json', import.
 
 test('manifest loads before ordinary third-party extensions', () => {
   assert.equal(manifest.js, 'dist/index.js');
-  assert.equal(manifest.css, 'style-compact.css');
+  assert.equal(manifest.css, 'style-status.css');
   assert.ok(Number.isInteger(manifest.loading_order));
   assert.ok(manifest.loading_order < 0);
 });

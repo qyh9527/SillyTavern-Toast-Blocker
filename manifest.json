@@ -5,7 +5,7 @@
   "optional": [],
   "dependencies": [],
   "js": "dist/index.js",
-  "css": "style-compact.css",
+  "css": "style-status.css",
   "hooks": {
     "install": "onInstall",
     "update": "onUpdate",
